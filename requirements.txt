@@ -8,3 +8,4 @@ requests
 fastapi
 uvicorn
 chromadb
+pysqlite3-binary
