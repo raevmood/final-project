@@ -1,0 +1,10 @@
+langchain-google-genai
+langchain-groq
+python-dotenv
+jupyter
+notebook
+langchain
+requests
+fastapi
+uvicorn
+chromadb
