@@ -3,9 +3,14 @@ Simple Vector Database Tool using ChromaDB for device storage and retrieval.
 """
 import chromadb
 from chromadb.config import Settings
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+    print("Using pysqlite3 for sqlite3.")
+except ImportError:
+    print("pysqlite3 not found or failed to import, falling back to default sqlite3.")
+    pass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
