@@ -6,10 +6,11 @@ from typing import Dict, Any, Optional, List
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Header
 from pydantic import BaseModel, Field
+from fastapi import Depends
 
 from dotenv import load_dotenv
 load_dotenv() # Load environment variables early
-
+from fastapi.middleware.cors import CORSMiddleware
 # Import your core components
 from llm_provider import LLMProvider
 from vector_db_tool import VectorDBTool
@@ -24,21 +25,30 @@ from device_agents import (
 )
 from data_ingestor import run_daily_ingestion # The refactored ingestion function
 
-# --- FastAPI App Initialization ---
 app = FastAPI(
     title="DeviceFinder.AI API",
     description="AI-powered multi-agent system for finding and recommending electronic devices.",
     version="1.0.0"
 )
 
-# --- Global Tool and Agent Initialization ---
-# These are initialized once when the app starts.
-# Ensure environment variables are loaded for LLMProvider and SerperSearchTool.
+origins = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://raevmood.github.io/final-frontend/"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[origins],
+    allow_credentials=True,
+    allow_methods=["*"], 
+    allow_headers=["*"],
+)
+
 llm_instance: Optional[LLMProvider] = None
 vector_db_instance: Optional[VectorDBTool] = None
 serper_instance: Optional[SerperSearchTool] = None
 
-# Agents
 phone_agent = None
 laptop_agent = None
 tablet_agent = None
@@ -54,7 +64,7 @@ async def startup_event():
     print("Initializing core components...")
     try:
         llm_instance = LLMProvider()
-        vector_db_instance = VectorDBTool() # ChromaDB will use './chroma_db' default
+        vector_db_instance = VectorDBTool()
         serper_instance = SerperSearchTool()
 
         # Initialize agents
@@ -260,3 +270,10 @@ async def build_custom_pc(request: PCBuilderRequest):
 
 # Add `Depends` for authentication
 from fastapi import Depends
+
+if __name__ == "__main__":
+    import uvicorn
+    # To run locally, you can specify host and port directly.
+    # The reload=True argument is great for development as it restarts the server
+    # automatically on code changes.
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
