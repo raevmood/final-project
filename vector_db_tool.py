@@ -1,8 +1,6 @@
 """
 Simple Vector Database Tool using ChromaDB for device storage and retrieval.
 """
-import chromadb
-from chromadb.config import Settings
 try:
     __import__('pysqlite3')
     import sys
@@ -11,6 +9,8 @@ try:
 except ImportError:
     print("pysqlite3 not found or failed to import, falling back to default sqlite3.")
     pass
+import chromadb
+from chromadb.config import Settings
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import json
