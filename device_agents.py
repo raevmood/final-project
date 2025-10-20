@@ -46,7 +46,8 @@ class PhoneAgent(BaseAgent):
         super().__init__(llm)
         self.phone_prompt = prompt_template
     
-    def handle_request(self, user_request: Dict[str, Any]) -> str:
+    # Changed return type hint to Dict[str, Any]
+    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]: 
         """Full reasoning pipeline with Vector DB first, then web search fallback."""
         try:
             # Step 1: Extract parameters from user request
@@ -60,10 +61,10 @@ class PhoneAgent(BaseAgent):
             """
             
             params_raw_llm_response = self.contact(extraction_prompt)
-            params_raw_cleaned = self._extract_json_from_markdown(params_raw_llm_response) # <--- CLEAN HERE
+            params_raw_cleaned = self._extract_json_from_markdown(params_raw_llm_response)
             
             try:
-                params = json.loads(params_raw_cleaned) # <--- PARSE CLEANED
+                params = json.loads(params_raw_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except json.JSONDecodeError:
@@ -105,10 +106,10 @@ class PhoneAgent(BaseAgent):
                 """
                 
                 decision_raw_llm_response = self.contact(search_decision_prompt)
-                decision_raw_cleaned = self._extract_json_from_markdown(decision_raw_llm_response) # <--- CLEAN HERE
+                decision_raw_cleaned = self._extract_json_from_markdown(decision_raw_llm_response)
                 
                 try:
-                    decision = json.loads(decision_raw_cleaned) # <--- PARSE CLEANED
+                    decision = json.loads(decision_raw_cleaned)
                     search_query = decision.get("search_query", "")
                 except json.JSONDecodeError:
                     print(f"WARNING: PhoneAgent - Failed to parse search_decision JSON (from LLM): {decision_raw_llm_response[:200]}... Cleaned: {decision_raw_cleaned[:200]}...")
@@ -145,15 +146,25 @@ class PhoneAgent(BaseAgent):
             """
             
             final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output) # <--- CLEAN FINAL RESPONSE
-            return final_response_cleaned # <--- RETURN CLEANED RESPONSE
+            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
+            
+            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
+            try:
+                return json.loads(final_response_cleaned) 
+            except json.JSONDecodeError:
+                print(f"CRITICAL ERROR: PhoneAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
+                # If the LLM consistently fails to return valid JSON, you might need to refine your prompt
+                # or add more robust parsing/correction logic. For now, raise an error.
+                raise ValueError("Final AI response was not valid JSON.")
             
         except Exception as e:
-            return json.dumps({
+            # If any other error occurs during the handling, return a dictionary describing the error.
+            # FastAPI will then correctly serialize this dictionary to JSON.
+            return {
                 "error": str(e),
                 "status": "failed",
                 "user_request": user_request
-            })
+            }
 
 
 class LaptopAgent(BaseAgent):
@@ -163,7 +174,8 @@ class LaptopAgent(BaseAgent):
         super().__init__(llm)
         self.laptop_prompt = prompt_template
     
-    def handle_request(self, user_request: Dict[str, Any]) -> str:
+    # Changed return type hint to Dict[str, Any]
+    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
         """Full reasoning pipeline with Vector DB first, then web search fallback."""
         try:
             user_request_str = json.dumps(user_request, indent=2)
@@ -174,10 +186,10 @@ class LaptopAgent(BaseAgent):
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
             params_raw_llm_response = self.contact(extraction_prompt)
-            params_raw_cleaned = self._extract_json_from_markdown(params_raw_llm_response) # <--- CLEAN HERE
+            params_raw_cleaned = self._extract_json_from_markdown(params_raw_llm_response)
             
             try:
-                params = json.loads(params_raw_cleaned) # <--- PARSE CLEANED
+                params = json.loads(params_raw_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except json.JSONDecodeError:
@@ -214,10 +226,10 @@ class LaptopAgent(BaseAgent):
                 Return ONLY JSON: {{"search_query": "your query"}}
                 """
                 decision_raw_llm_response = self.contact(search_decision_prompt)
-                decision_raw_cleaned = self._extract_json_from_markdown(decision_raw_llm_response) # <--- CLEAN HERE
+                decision_raw_cleaned = self._extract_json_from_markdown(decision_raw_llm_response)
                 
                 try:
-                    decision = json.loads(decision_raw_cleaned) # <--- PARSE CLEANED
+                    decision = json.loads(decision_raw_cleaned)
                     search_query = decision.get("search_query", "")
                 except json.JSONDecodeError:
                     print(f"WARNING: LaptopAgent - Failed to parse search_decision JSON (from LLM): {decision_raw_llm_response[:200]}... Cleaned: {decision_raw_cleaned[:200]}...")
@@ -247,15 +259,21 @@ class LaptopAgent(BaseAgent):
             """
             
             final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output) # <--- CLEAN FINAL RESPONSE
-            return final_response_cleaned # <--- RETURN CLEANED RESPONSE
+            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
+            
+            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
+            try:
+                return json.loads(final_response_cleaned) 
+            except json.JSONDecodeError:
+                print(f"CRITICAL ERROR: LaptopAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
+                raise ValueError("Final AI response for Laptop was not valid JSON.")
             
         except Exception as e:
-            return json.dumps({
+            return {
                 "error": str(e),
                 "status": "failed",
                 "user_request": user_request
-            })
+            }
 
 
 class TabletAgent(BaseAgent):
@@ -265,7 +283,8 @@ class TabletAgent(BaseAgent):
         super().__init__(llm)
         self.tablet_prompt = prompt_template
     
-    def handle_request(self, user_request: Dict[str, Any]) -> str:
+    # Changed return type hint to Dict[str, Any]
+    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
         try:
             user_request_str = json.dumps(user_request, indent=2)
             
@@ -312,11 +331,17 @@ class TabletAgent(BaseAgent):
             """
             
             final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output) # <--- CLEAN FINAL RESPONSE
-            return final_response_cleaned # <--- RETURN CLEANED RESPONSE
+            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
+            
+            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
+            try:
+                return json.loads(final_response_cleaned) 
+            except json.JSONDecodeError:
+                print(f"CRITICAL ERROR: TabletAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
+                raise ValueError("Final AI response for Tablet was not valid JSON.")
             
         except Exception as e:
-            return json.dumps({"error": str(e), "status": "failed"})
+            return {"error": str(e), "status": "failed", "user_request": user_request}
 
 
 class EarpieceAgent(BaseAgent):
@@ -326,7 +351,8 @@ class EarpieceAgent(BaseAgent):
         super().__init__(llm)
         self.earpiece_prompt = prompt_template
     
-    def handle_request(self, user_request: Dict[str, Any]) -> str:
+    # Changed return type hint to Dict[str, Any]
+    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
         try:
             user_request_str = json.dumps(user_request, indent=2)
             
@@ -374,11 +400,17 @@ class EarpieceAgent(BaseAgent):
             """
             
             final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output) # <--- CLEAN FINAL RESPONSE
-            return final_response_cleaned # <--- RETURN CLEANED RESPONSE
+            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
+            
+            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
+            try:
+                return json.loads(final_response_cleaned) 
+            except json.JSONDecodeError:
+                print(f"CRITICAL ERROR: EarpieceAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
+                raise ValueError("Final AI response for Earpiece was not valid JSON.")
             
         except Exception as e:
-            return json.dumps({"error": str(e), "status": "failed"})
+            return {"error": str(e), "status": "failed", "user_request": user_request}
 
 
 class PreBuiltPCAgent(BaseAgent):
@@ -388,7 +420,8 @@ class PreBuiltPCAgent(BaseAgent):
         super().__init__(llm)
         self.pc_prompt = prompt_template
     
-    def handle_request(self, user_request: Dict[str, Any]) -> str:
+    # Changed return type hint to Dict[str, Any]
+    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
         try:
             user_request_str = json.dumps(user_request, indent=2)
             
@@ -436,11 +469,21 @@ class PreBuiltPCAgent(BaseAgent):
             """
             
             final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output) # <--- CLEAN FINAL RESPONSE
-            return final_response_cleaned # <--- RETURN CLEANED RESPONSE
+            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
+            
+            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
+            try:
+                return json.loads(final_response_cleaned) 
+            except json.JSONDecodeError:
+                print(f"CRITICAL ERROR: PreBuiltPCAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
+                raise ValueError("Final AI response for Pre-built PC was not valid JSON.")
             
         except Exception as e:
-            return json.dumps({"error": str(e), "status": "failed"})
+            return {
+                "error": str(e),
+                "status": "failed",
+                "user_request": user_request
+            }
 
 
 class PCBuilderAgent(BaseAgent):
@@ -450,7 +493,8 @@ class PCBuilderAgent(BaseAgent):
         super().__init__(llm)
         self.builder_prompt = prompt_template
     
-    def handle_request(self, user_request: Dict[str, Any]) -> str:
+    # Changed return type hint to Dict[str, Any]
+    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
         try:
             user_request_str = json.dumps(user_request, indent=2)
             # PCBuilderAgent extracts params without LLM, so no cleaning here for that specific step
@@ -497,11 +541,21 @@ class PCBuilderAgent(BaseAgent):
             """
             
             final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output) # <--- CLEAN FINAL RESPONSE
-            return final_response_cleaned # <--- RETURN CLEANED RESPONSE
+            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
+            
+            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
+            try:
+                return json.loads(final_response_cleaned) 
+            except json.JSONDecodeError:
+                print(f"CRITICAL ERROR: PCBuilderAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
+                raise ValueError("Final AI response for PC Builder was not valid JSON.")
             
         except Exception as e:
-            return json.dumps({"error": str(e), "status": "failed"})
+            return {
+                "error": str(e),
+                "status": "failed",
+                "user_request": user_request
+            }
 
 
 # Factory functions for easy agent creation

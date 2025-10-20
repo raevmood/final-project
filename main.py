@@ -1,4 +1,3 @@
-# main.py
 import os
 import json
 from datetime import datetime
@@ -202,70 +201,73 @@ async def find_phone(request: PhoneRequest):
     if not phone_agent:
         raise HTTPException(status_code=503, detail="Phone agent not initialized.")
     try:
-        raw_result = phone_agent.handle_request(request.dict(exclude_none=True))
-        return json.loads(raw_result)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail=f"Agent returned invalid JSON: {raw_result}")
+        # NOW, phone_agent.handle_request returns a Python DICTIONARY
+        result_dict = phone_agent.handle_request(request.dict(exclude_none=True))
+        # FastAPI will automatically serialize this dictionary to JSON.
+        return result_dict # <--- No json.loads() needed here!
+    except ValueError as ve: # Catch the specific ValueError from the agent for bad JSON
+        raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in Phone Agent: {str(e)}")
+        # This catches any other unexpected errors from the agent or its tools
+        raise HTTPException(status_code=500, detail=f"Error in Phone Agent processing: {str(e)}")
 
 @app.post("/find_laptop", summary="Find recommended laptops")
 async def find_laptop(request: LaptopRequest):
     if not laptop_agent:
         raise HTTPException(status_code=503, detail="Laptop agent not initialized.")
     try:
-        raw_result = laptop_agent.handle_request(request.dict(exclude_none=True))
-        return json.loads(raw_result)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail=f"Agent returned invalid JSON: {raw_result}")
+        result_dict = laptop_agent.handle_request(request.dict(exclude_none=True))
+        return result_dict # <--- Changed
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in Laptop Agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in Laptop Agent processing: {str(e)}")
 
 @app.post("/find_tablet", summary="Find recommended tablets")
 async def find_tablet(request: TabletRequest):
     if not tablet_agent:
         raise HTTPException(status_code=503, detail="Tablet agent not initialized.")
     try:
-        raw_result = tablet_agent.handle_request(request.dict(exclude_none=True))
-        return json.loads(raw_result)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail=f"Agent returned invalid JSON: {raw_result}")
+        result_dict = tablet_agent.handle_request(request.dict(exclude_none=True))
+        return result_dict # <--- Changed
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in Tablet Agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in Tablet Agent processing: {str(e)}")
 
 @app.post("/find_earpiece", summary="Find recommended earpieces/headphones")
 async def find_earpiece(request: EarpieceRequest):
     if not earpiece_agent:
         raise HTTPException(status_code=503, detail="Earpiece agent not initialized.")
     try:
-        raw_result = earpiece_agent.handle_request(request.dict(exclude_none=True))
-        return json.loads(raw_result)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail=f"Agent returned invalid JSON: {raw_result}")
+        result_dict = earpiece_agent.handle_request(request.dict(exclude_none=True))
+        return result_dict # <--- Changed
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in Earpiece Agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in Earpiece Agent processing: {str(e)}")
 
 @app.post("/find_prebuilt_pc", summary="Find recommended pre-built PCs")
 async def find_prebuilt_pc(request: PreBuiltPCRequest):
     if not prebuilt_pc_agent:
         raise HTTPException(status_code=503, detail="Pre-built PC agent not initialized.")
     try:
-        raw_result = prebuilt_pc_agent.handle_request(request.dict(exclude_none=True))
-        return json.loads(raw_result)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail=f"Agent returned invalid JSON: {raw_result}")
+        result_dict = prebuilt_pc_agent.handle_request(request.dict(exclude_none=True))
+        return result_dict # <--- Changed
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error in Pre-built PC Agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error in Pre-built PC Agent processing: {str(e)}")
 
 @app.post("/build_custom_pc", summary="Get recommendations for custom PC components")
 async def build_custom_pc(request: PCBuilderRequest):
     if not pc_builder_agent:
         raise HTTPException(status_code=503, detail="PC Builder agent not initialized.")
     try:
-        raw_result = pc_builder_agent.handle_request(request.dict(exclude_none=True))
-        return json.loads(raw_result)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail=f"Agent returned invalid JSON: {raw_result}")
+        result_dict = pc_builder_agent.handle_request(request.dict(exclude_none=True))
+        return result_dict # <--- Changed
+    except ValueError as ve:
+        raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in PC Builder Agent: {str(e)}")
 
@@ -274,7 +276,4 @@ from fastapi import Depends
 
 if __name__ == "__main__":
     import uvicorn
-    # To run locally, you can specify host and port directly.
-    # The reload=True argument is great for development as it restarts the server
-    # automatically on code changes.
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
