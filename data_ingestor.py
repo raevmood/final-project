@@ -29,7 +29,7 @@ def parse_serper_result_with_llm(llm_provider: LLMProvider, item: Dict[str, str]
     - `vendor`: The online vendor/store name.
     - `url`: The product's URL.
     - `specs`: A dictionary of key specifications (e.g., "ram", "storage", "processor", "display", "battery", "gpu"). Extract as much detail as possible from the snippet.
-    - `physical_store`: Name of a physical store if mentioned, otherwise "Online via {vendor}".
+    - `physical_store`: Name of a physical store if mentioned, otherwise 'Online via the extracted vendor'.
     - `store_contact`: Phone or email for physical store if mentioned.
 
     If you cannot find a price or if the result does not appear to be a product listing (e.g., it's a review, news, or general info), return an empty JSON object {{}}.
