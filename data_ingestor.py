@@ -34,6 +34,7 @@ def parse_serper_result_with_llm(llm_provider: LLMProvider, item: Dict[str, str]
 
     If you cannot find a price or if the result does not appear to be a product listing (e.g., it's a review, news, or general info), return an empty JSON object {{}}.
     Return ONLY the JSON object. Do not add any conversational text or markdown.
+    “Respond with only one valid JSON object, with no Markdown code fences, no extra text, and no multiple JSON blocks. Each field must have a value; if unknown, use an empty string "" instead of null.”
     """
     
     try:

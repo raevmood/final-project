@@ -3,13 +3,18 @@ import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Header
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, Depends
 from pydantic import BaseModel, Field
-from fastapi import Depends
+from fastapi.middleware.cors import CORSMiddleware
 
 from dotenv import load_dotenv
 load_dotenv() # Load environment variables early
-from fastapi.middleware.cors import CORSMiddleware
+
+# Import authentication components (NEW)
+import auth_routes
+from auth_utils import get_current_user
+from user_store import UserStore
+
 # Import your core components
 from llm_provider import LLMProvider
 from vector_db_tool import VectorDBTool
@@ -26,15 +31,17 @@ from data_ingestor import run_daily_ingestion # The refactored ingestion functio
 
 app = FastAPI(
     title="DeviceFinder.AI API",
-    description="AI-powered multi-agent system for finding and recommending electronic devices.",
-    version="1.0.0"
+    description="AI-powered multi-agent system for finding and recommending electronic devices with JWT authentication.",
+    version="2.0.0"
 )
 
 origins = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "https://raevmood.github.io/final-frontend",
-    "https://raevmood.github.io"
+    "https://raevmood.github.io",
+    "http://localhost:3000",
+    "http://localhost:5173",  # Vite
 ]
 
 app.add_middleware(
@@ -44,6 +51,9 @@ app.add_middleware(
     allow_methods=["*"], 
     allow_headers=["*"],
 )
+
+# Include authentication routes (NEW)
+app.include_router(auth_routes.router)
 
 llm_instance: Optional[LLMProvider] = None
 vector_db_instance: Optional[VectorDBTool] = None
@@ -61,6 +71,15 @@ async def startup_event():
     global llm_instance, vector_db_instance, serper_instance
     global phone_agent, laptop_agent, tablet_agent, earpiece_agent, prebuilt_pc_agent, pc_builder_agent
 
+    print("=" * 60)
+    print("DeviceFinder.AI - Starting Up")
+    print("=" * 60)
+    
+    # Initialize test user for development (NEW)
+    from user_store import initialize_test_users
+    initialize_test_users()
+    print(f"✓ Total registered users: {UserStore.get_user_count()}")
+
     print("Initializing core components...")
     try:
         llm_instance = LLMProvider()
@@ -75,11 +94,10 @@ async def startup_event():
         prebuilt_pc_agent = create_prebuilt_pc_agent(llm_instance, vector_db_instance, serper_instance)
         pc_builder_agent = create_pc_builder_agent(llm_instance, serper_instance) # PC Builder doesn't use vector_db
 
-        print("All components and agents initialized successfully.")
+        print("✓ All components and agents initialized successfully.")
+        print("=" * 60)
     except Exception as e:
-        print(f"Failed to initialize components: {e}")
-        # Depending on severity, you might want to re-raise or handle gracefully.
-        # For a production system, this could prevent the app from starting.
+        print(f"❌ Failed to initialize components: {e}")
         raise RuntimeError(f"Application startup failed: {e}") from e
 
 # --- Security for Ingestion Endpoint ---
@@ -96,7 +114,15 @@ def authenticate_ingestion_request(x_api_key: str = Header(None)):
 
 @app.get("/", summary="Root endpoint for API status")
 async def root():
-    return {"message": "DeviceFinder.AI API is running. Visit /docs for API details."}
+    return {
+        "message": "DeviceFinder.AI API is running",
+        "version": "2.0.0",
+        "authentication": "JWT-based (in-memory)",
+        "docs": "/docs",
+        "register": "/auth/register",
+        "login": "/auth/login",
+        "total_users": UserStore.get_user_count()
+    }
 
 # --- Ingestion Endpoint ---
 @app.post(
@@ -194,85 +220,123 @@ class PCBuilderRequest(DeviceRequest):
     peripherals_included: Optional[bool] = None
 
 
-# --- Agent Endpoints ---
+# --- UPDATED: Protected Agent Endpoints (Now require JWT) ---
 
-@app.post("/find_phone", summary="Find recommended phones")
-async def find_phone(request: PhoneRequest):
+@app.post("/find_phone", summary="Find recommended phones (Requires Auth)")
+async def find_phone(
+    request: PhoneRequest,
+    current_user: dict = Depends(get_current_user)  # NEW: Require authentication
+):
     if not phone_agent:
         raise HTTPException(status_code=503, detail="Phone agent not initialized.")
+    
+    # Log authenticated user activity
+    print(f"[AUTH] User '{current_user['username']}' searching for phones")
+    UserStore.increment_search_count(current_user['username'])
+    
     try:
-        # NOW, phone_agent.handle_request returns a Python DICTIONARY
         result_dict = phone_agent.handle_request(request.dict(exclude_none=True))
-        # FastAPI will automatically serialize this dictionary to JSON.
-        return result_dict # <--- No json.loads() needed here!
-    except ValueError as ve: # Catch the specific ValueError from the agent for bad JSON
+        return result_dict
+    except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
-        # This catches any other unexpected errors from the agent or its tools
         raise HTTPException(status_code=500, detail=f"Error in Phone Agent processing: {str(e)}")
 
-@app.post("/find_laptop", summary="Find recommended laptops")
-async def find_laptop(request: LaptopRequest):
+@app.post("/find_laptop", summary="Find recommended laptops (Requires Auth)")
+async def find_laptop(
+    request: LaptopRequest,
+    current_user: dict = Depends(get_current_user)  # NEW
+):
     if not laptop_agent:
         raise HTTPException(status_code=503, detail="Laptop agent not initialized.")
+    
+    print(f"[AUTH] User '{current_user['username']}' searching for laptops")
+    UserStore.increment_search_count(current_user['username'])
+    
     try:
         result_dict = laptop_agent.handle_request(request.dict(exclude_none=True))
-        return result_dict # <--- Changed
+        return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in Laptop Agent processing: {str(e)}")
 
-@app.post("/find_tablet", summary="Find recommended tablets")
-async def find_tablet(request: TabletRequest):
+@app.post("/find_tablet", summary="Find recommended tablets (Requires Auth)")
+async def find_tablet(
+    request: TabletRequest,
+    current_user: dict = Depends(get_current_user)  # NEW
+):
     if not tablet_agent:
         raise HTTPException(status_code=503, detail="Tablet agent not initialized.")
+    
+    print(f"[AUTH] User '{current_user['username']}' searching for tablets")
+    UserStore.increment_search_count(current_user['username'])
+    
     try:
         result_dict = tablet_agent.handle_request(request.dict(exclude_none=True))
-        return result_dict # <--- Changed
+        return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in Tablet Agent processing: {str(e)}")
 
-@app.post("/find_earpiece", summary="Find recommended earpieces/headphones")
-async def find_earpiece(request: EarpieceRequest):
+@app.post("/find_earpiece", summary="Find recommended earpieces/headphones (Requires Auth)")
+async def find_earpiece(
+    request: EarpieceRequest,
+    current_user: dict = Depends(get_current_user)  # NEW
+):
     if not earpiece_agent:
         raise HTTPException(status_code=503, detail="Earpiece agent not initialized.")
+    
+    print(f"[AUTH] User '{current_user['username']}' searching for earpieces")
+    UserStore.increment_search_count(current_user['username'])
+    
     try:
         result_dict = earpiece_agent.handle_request(request.dict(exclude_none=True))
-        return result_dict # <--- Changed
+        return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in Earpiece Agent processing: {str(e)}")
 
-@app.post("/find_prebuilt_pc", summary="Find recommended pre-built PCs")
-async def find_prebuilt_pc(request: PreBuiltPCRequest):
+@app.post("/find_prebuilt_pc", summary="Find recommended pre-built PCs (Requires Auth)")
+async def find_prebuilt_pc(
+    request: PreBuiltPCRequest,
+    current_user: dict = Depends(get_current_user)  # NEW
+):
     if not prebuilt_pc_agent:
         raise HTTPException(status_code=503, detail="Pre-built PC agent not initialized.")
+    
+    print(f"[AUTH] User '{current_user['username']}' searching for pre-built PCs")
+    UserStore.increment_search_count(current_user['username'])
+    
     try:
         result_dict = prebuilt_pc_agent.handle_request(request.dict(exclude_none=True))
-        return result_dict # <--- Changed
+        return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in Pre-built PC Agent processing: {str(e)}")
 
-@app.post("/build_custom_pc", summary="Get recommendations for custom PC components")
-async def build_custom_pc(request: PCBuilderRequest):
+@app.post("/build_custom_pc", summary="Get recommendations for custom PC components (Requires Auth)")
+async def build_custom_pc(
+    request: PCBuilderRequest,
+    current_user: dict = Depends(get_current_user)  # NEW
+):
     if not pc_builder_agent:
         raise HTTPException(status_code=503, detail="PC Builder agent not initialized.")
+    
+    print(f"[AUTH] User '{current_user['username']}' building a custom PC")
+    UserStore.increment_search_count(current_user['username'])
+    
     try:
         result_dict = pc_builder_agent.handle_request(request.dict(exclude_none=True))
-        return result_dict # <--- Changed
+        return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in PC Builder Agent: {str(e)}")
 
-# Add `Depends` for authentication
-from fastapi import Depends
 
 if __name__ == "__main__":
     import uvicorn
