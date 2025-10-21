@@ -47,45 +47,69 @@ class BaseAgent:
         return text.strip()
 
     def _clean_json_text(self, text: str) -> str:
-        """Fixes common JSON formatting issues in LLM output."""
-        import re
+            """Fixes common JSON formatting issues in LLM output."""
+            import re
 
-        # Normalize quotes
-        text = text.replace(""", '"').replace(""", '"').replace("'", "'")
+            # Normalize quotes
+            text = text.replace(""", '"').replace(""", '"').replace("'", '"') # Ensured ' to "
 
-        # Fix stray commas before closing braces/brackets
-        text = re.sub(r",\s*([\]}])", r"\1", text)
+            # Fix stray commas before closing braces/brackets
+            text = re.sub(r",\s*([\]}])", r"\1", text)
 
-        # Fix unescaped inch marks like 27" Monitor → 27\" Monitor
-        text = re.sub(r'(\d)"(?=[^:,\}\]])', r'\1\\"', text)
+            # Fix unescaped inch marks like 27" Monitor → 27\" Monitor
+            text = re.sub(r'(\d)"(?=[^:,\}\]])', r'\1\\"', text)
 
-        # FIX 1: Handle URLs with missing closing quotes
-        text = re.sub(
-            r'("url"\s*:\s*")(https?://[^"\n]+?)(/)\s*\n',
-            r'\1\2\3"\n',
-            text
-        )
+            # FIX 1: Handle URLs with missing closing quotes
+            text = re.sub(
+                r'("url"\s*:\s*")(https?://[^"\n]+?)(/)\s*\n',
+                r'\1\2\3"\n',
+                text
+            )
 
-        # FIX 2: More robust URL quote fixing
-        text = re.sub(
-            r'("url"\s*:\s*"https?://[^"\n]+)(\s*[\r\n]+\s*[},\]])',
-            r'\1"\2',
-            text
-        )
+            # FIX 2: More robust URL quote fixing
+            text = re.sub(
+                r'("url"\s*:\s*"https?://[^"\n]+)(\s*[\r\n]+\s*[},\]])',
+                r'\1"\2',
+                text
+            )
 
-        # FIX 3: Remove incorrectly escaped closing quotes (e.g., 200000\")
-        # This fixes: "text under 200000\"  →  "text under 200000"
-        text = re.sub(r'([\w\d\s]+)\\"(\s*[,\n\r])', r'\1"\2', text)
+            # FIX 3: Remove incorrectly escaped closing quotes (e.g., 200000\")
+            # This fixes: "text under 200000\"  →  "text under 200000"
+            text = re.sub(r'([\w\d\s]+)\\"(\s*[,\n\r])', r'\1"\2', text)
 
-        # FIX 4: Fix cases where backslash appears before closing quote at end of line
-        # Handles: "query text\"  →  "query text"
-        text = re.sub(r'\\"(\s*$)', r'"\1', text, flags=re.MULTILINE)
+            # FIX 4: Fix cases where backslash appears before closing quote at end of line
+            # Handles: "query text\"  →  "query text"
+            text = re.sub(r'\\"(\s*$)', r'"\1', text, flags=re.MULTILINE)
 
-        # FIX 5: Remove literal \n or \t inside string values
-        text = re.sub(r'(?<=": ")([^"]*?)\\n([^"]*?)(?=")', lambda m: m.group(0).replace('\\n', ' '), text)
-        text = re.sub(r'(?<=": ")([^"]*?)\\t([^"]*?)(?=")', lambda m: m.group(0).replace('\\t', ' '), text)
+            # FIX 5: Remove literal \n or \t inside string values
+            text = re.sub(r'(?<=": ")([^"]*?)\\n([^"]*?)(?=")', lambda m: m.group(0).replace('\\n', ' '), text)
+            text = re.sub(r'(?<=": ")([^"]*?)\\t([^"]*?)(?=")', lambda m: m.group(0).replace('\\t', ' '), text)
 
-        return text.strip()
+            # NEW FIX 6: Quote unquoted string values for specific fields (e.g., email, phone numbers)
+            # This targets key-value pairs where the value is clearly a string but unquoted.
+            # This is a bit aggressive, adjust regex for specific fields if it quotes too much.
+            # For phone numbers (starts with 0, or looks like a number but needs quotes)
+            text = re.sub(
+                r'("store_phone_number"\s*:\s*)([0-9]+)(\s*[,\]}])',
+                r'\1"\2"\3',
+                text
+            )
+            # For email addresses (contains @ and .)
+            text = re.sub(
+                r'("store_email"\s*:\s*)([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})(\s*[,\]}])',
+                r'\1"\2"\3',
+                text
+            )
+            # General unquoted string values that appear after a colon and before a comma/brace
+            # Use with caution, can misquote valid numbers if not careful.
+            # Only enable if the above targeted fixes aren't enough, and adjust.
+            # text = re.sub(
+            #     r':\s*([a-zA-Z0-9._%+-]+)(,\n|\n|})',
+            #     r': "\1"\2',
+            #     text
+            # )
+
+            return text.strip()
 
     @staticmethod
     def safe_json_loads(text):
