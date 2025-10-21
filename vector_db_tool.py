@@ -159,33 +159,33 @@ class VectorDBTool:
     def cleanup_old_devices(self, category: str, days_old: int = 30) -> int:
         """
         Remove devices older than specified days.
-        
-        Args:
-            category: Device category to clean
-            days_old: Remove devices older than this many days
-            
-        Returns:
-            Number of devices removed
+        Uses ISO datetime strings safely (string comparison on UTC format).
         """
         from datetime import timedelta
-        
+
         cutoff_date = (datetime.utcnow() - timedelta(days=days_old)).isoformat()
-        
-        # Get all devices in category older than cutoff
-        results = self.collection.get(
-            where={
-                "$and": [
-                    {"category": {"$eq": category}},
-                    {"indexed_at": {"$lt": cutoff_date}}
-                ]
-            }
-        )
-        
-        if results['ids']:
-            self.collection.delete(ids=results['ids'])
-            return len(results['ids'])
-        
+
+        try:
+            # String-based ISO comparisons work because ISO8601 timestamps are lexicographically sortable
+            results = self.collection.get(
+                where={
+                    "$and": [
+                        {"category": {"$eq": category}},
+                        {"indexed_at": {"$lt": cutoff_date}}
+                    ]
+                }
+            )
+        except Exception as e:
+            print(f"[WARN] Cleanup query failed: {e}")
+            return 0
+
+        if results.get("ids"):
+            self.collection.delete(ids=results["ids"])
+            print(f"🧹 Cleaned up {len(results['ids'])} old '{category}' devices.")
+            return len(results["ids"])
+
         return 0
+
     
     def get_device_count(self, category: Optional[str] = None) -> int:
         """Get total device count, optionally filtered by category."""
