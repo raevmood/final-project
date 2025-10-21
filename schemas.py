@@ -13,7 +13,12 @@ class UserRegister(BaseModel):
     """Schema for user registration"""
     username: str = Field(..., min_length=3, max_length=50, description="Unique username")
     email: EmailStr = Field(..., description="Valid email address")
-    password: str = Field(..., min_length=8, max_length=100, description="Strong password")
+    password: str = Field(
+        ..., 
+        min_length=8, 
+        max_length=72,  # Bcrypt limit
+        description="Strong password (8-72 characters)"
+    )
     
     class Config:
         json_schema_extra = {
@@ -23,6 +28,7 @@ class UserRegister(BaseModel):
                 "password": "securepass123"
             }
         }
+
 
 
 class UserLogin(BaseModel):

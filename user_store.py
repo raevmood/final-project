@@ -23,6 +23,9 @@ class UserStore:
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a plain password"""
+        # Bcrypt has a 72-byte limit, truncate if necessary
+        if len(password.encode('utf-8')) > 72:
+            password = password[:72]
         return pwd_context.hash(password)
     
     @staticmethod
@@ -39,9 +42,13 @@ class UserStore:
             User dictionary with id, username, email, etc.
         
         Raises:
-            ValueError: If username or email already exists
+            ValueError: If username or email already exists or password too long
         """
         global _user_id_counter
+        
+        # Validate password length (bcrypt limit)
+        if len(password.encode('utf-8')) > 72:
+            raise ValueError("Password too long (max 72 bytes)")
         
         # Check if username exists
         if username in USERS_DB:
@@ -61,7 +68,7 @@ class UserStore:
             "is_active": True,
             "created_at": datetime.utcnow().isoformat() + "Z",
             "last_login": None,
-            "search_count": 0  # Track number of searches (optional)
+            "search_count": 0
         }
         
         USERS_DB[username] = user_data
