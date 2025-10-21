@@ -85,7 +85,7 @@ Return a strictly valid JSON object like this:
 Escape any newlines and quotes in string values to ensure valid JSON.
 IMPORTANT!!!
 Return ONLY valid JSON, without extra text or explanations. Do not include markdown or code fences.
-
+Phone numbers and email addresses MUST be enclosed in double quotes as strings!!!
 ADDITIONAL RULES
 - Always recommend *currently available* phones for the specified location when data allows.
 - If no phones meet all criteria, suggest close alternatives and explain trade-offs.
@@ -194,7 +194,7 @@ Return a strictly valid JSON object structured as follows:
 Escape any newlines and quotes in string values to ensure valid JSON.
 IMPORTANT!!!
 Return ONLY valid JSON, without extra text or explanations. Do not include markdown or code fences.
-
+Phone numbers and email addresses MUST be enclosed in double quotes as strings!!!
 ADDITIONAL RULES
 
 - Always recommend currently available laptops in the specified region when possible.
@@ -305,7 +305,7 @@ Return a strictly valid JSON object structured as follows:
 Escape any newlines and quotes in string values to ensure valid JSON.
 IMPORTANT!!!
 Return ONLY valid JSON, without extra text or explanations. Do not include markdown or code fences.
-
+Phone numbers and email addresses MUST be enclosed in double quotes as strings!!!
 ADDITIONAL RULES
 
 - Always recommend currently available tablets in the specified region when possible.
@@ -401,6 +401,7 @@ Return a strictly valid JSON object like this:
 Escape any newlines and quotes in string values to ensure valid JSON.
 IMPORTANT!!!
 Return ONLY valid JSON, without extra text or explanations. Do not include markdown or code fences.
+Phone numbers and email addresses MUST be enclosed in double quotes as strings!!!
 
 ADDITIONAL RULES
 - Always recommend *currently available* earpieces for the specified location when data allows.
@@ -506,6 +507,7 @@ Return a **valid JSON object only** (no markdown, no commentary):
 
 **STRICT RULES**
 - Every string must be in **double quotes (" ")**.
+- Phone numbers and email addresses MUST be enclosed in double quotes as strings.
 - All URLs must be fully closed and contain no line breaks.
 - Escape all special characters properly.
 - Output **only** JSON (no markdown, no ``` fences, no text).
@@ -601,4 +603,5 @@ Return only valid JSON following this exact structure:
 Escape any newlines and quotes in string values to ensure valid JSON.
 IMPORTANT!!!
 Return ONLY valid JSON, without extra text or explanations. Do not include markdown or code fences.
+- Phone numbers and email addresses MUST be enclosed in double quotes as strings.
 """
