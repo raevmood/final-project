@@ -87,10 +87,17 @@ class VectorDBTool:
         for metadata in metadatas:
             clean_meta = {}
             for k, v in metadata.items():
-                if isinstance(v, list):
-                    clean_meta[k] = ", ".join(map(str, v))  # Convert lists to comma-separated strings
-                elif isinstance(v, (dict, set)):
-                    clean_meta[k] = json.dumps(v, ensure_ascii=False)  # Store dicts as JSON strings
+                # Replace None with empty string or 0 (depending on type)
+                if v is None:
+                    clean_meta[k] = ""  # or 0 if numeric
+                elif isinstance(v, list):
+                    clean_meta[k] = ", ".join(map(str, v))
+                elif isinstance(v, dict):
+                    # Recursively remove None inside dicts before dumping
+                    safe_dict = {ik: ("" if iv is None else iv) for ik, iv in v.items()}
+                    clean_meta[k] = json.dumps(safe_dict, ensure_ascii=False)
+                elif isinstance(v, (set, tuple)):
+                    clean_meta[k] = ", ".join(map(str, v))
                 else:
                     clean_meta[k] = v
             sanitized_metadatas.append(clean_meta)
