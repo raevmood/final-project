@@ -213,10 +213,24 @@ class BaseAgent:
         if isinstance(response["recommendations"], list):
             valid_recs = []
             for i, rec in enumerate(response["recommendations"]):
-                if rec and isinstance(rec, dict) and (rec.get("name") or rec.get("title")):
-                    valid_recs.append(rec)
+                if rec and isinstance(rec, dict):
+                    # Check for valid identifier fields
+                    # Standard devices: 'name' or 'title'
+                    # PC Builder: 'build_name' or 'components'
+                    has_identifier = (
+                        rec.get("name") or 
+                        rec.get("title") or 
+                        rec.get("build_name") or
+                        rec.get("components")  # PC Builder has components array
+                    )
+                    
+                    if has_identifier:
+                        valid_recs.append(rec)
+                    else:
+                        print(f"[WARN] Invalid recommendation at index {i}: missing identifier (name/title/build_name/components)")
+                        print(f"[WARN] Keys present: {list(rec.keys())[:10]}")  # Show first 10 keys
                 else:
-                    print(f"[WARN] Invalid recommendation at index {i}: {rec}")
+                    print(f"[WARN] Invalid recommendation at index {i}: not a dict or is None")
             
             response["recommendations"] = valid_recs
             
