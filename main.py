@@ -2,8 +2,9 @@ import os
 import json
 from datetime import datetime
 from typing import Dict, Any, Optional, List
+from requests import status_codes
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, Depends
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header, Depends, status
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -16,7 +17,7 @@ from auth_utils import get_current_user
 from user_store import UserStore
 
 # Import your core components
-from llm_provider import LLMProvider
+from llm_provider import LLMProvider, RateLimitExceeded # Added RateLimitExceeded
 from vector_db_tool import VectorDBTool
 from serper_tool import SerperSearchTool
 from device_agents import (
@@ -28,6 +29,10 @@ from device_agents import (
     create_pc_builder_agent
 )
 from data_ingestor import run_daily_ingestion # The refactored ingestion function
+
+# Import chatbot components (NEW)
+from chatbot import DeviceFinderChatbot
+from memory import DeviceFinderMemory
 
 app = FastAPI(
     title="DeviceFinder.AI API",
@@ -227,6 +232,9 @@ async def find_phone(
     request: PhoneRequest,
     current_user: dict = Depends(get_current_user)  # NEW: Require authentication
 ):
+    # Ensure llm_instance is initialized
+    if not llm_instance:
+        raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
     if not phone_agent:
         raise HTTPException(status_code=503, detail="Phone agent not initialized.")
     
@@ -250,6 +258,8 @@ async def find_laptop(
     request: LaptopRequest,
     current_user: dict = Depends(get_current_user)  # NEW
 ):
+    if not llm_instance:
+        raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
     if not laptop_agent:
         raise HTTPException(status_code=503, detail="Laptop agent not initialized.")
     
@@ -271,6 +281,8 @@ async def find_tablet(
     request: TabletRequest,
     current_user: dict = Depends(get_current_user)  # NEW
 ):
+    if not llm_instance:
+        raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
     if not tablet_agent:
         raise HTTPException(status_code=503, detail="Tablet agent not initialized.")
     
@@ -292,6 +304,8 @@ async def find_earpiece(
     request: EarpieceRequest,
     current_user: dict = Depends(get_current_user)  # NEW
 ):
+    if not llm_instance:
+        raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
     if not earpiece_agent:
         raise HTTPException(status_code=503, detail="Earpiece agent not initialized.")
     
@@ -313,6 +327,8 @@ async def find_prebuilt_pc(
     request: PreBuiltPCRequest,
     current_user: dict = Depends(get_current_user)  # NEW
 ):
+    if not llm_instance:
+        raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
     if not prebuilt_pc_agent:
         raise HTTPException(status_code=503, detail="Pre-built PC agent not initialized.")
     
@@ -334,6 +350,8 @@ async def build_custom_pc(
     request: PCBuilderRequest,
     current_user: dict = Depends(get_current_user)  # NEW
 ):
+    if not llm_instance:
+        raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
     if not pc_builder_agent:
         raise HTTPException(status_code=503, detail="PC Builder agent not initialized.")
     
@@ -349,6 +367,76 @@ async def build_custom_pc(
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in PC Builder Agent: {str(e)}")
+
+
+# --- Chatbot Endpoint (NEW) ---
+class ChatMessage(BaseModel):
+    message: str
+
+@app.post("/chat", summary="Interact with the DeviceFinder.ai chatbot (Requires Auth)")
+async def chat_with_devicefinder(
+    chat_message: ChatMessage,
+    current_user: dict = Depends(get_current_user) # Authenticate user
+):
+    """
+    Interact with the DeviceFinder.ai chatbot.
+    
+    This endpoint takes a user message, processes it through the chatbot,
+    and returns a guided response. Memory is maintained per authenticated user.
+    """
+    if not llm_instance:
+        raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
+
+    user_id = current_user["id"] # Get user ID from the authenticated user
+    username = current_user["username"] # For logging/context
+
+    print(f"Chatbot - User {username} ({user_id}) sent message: {chat_message.message[:100]}...")
+
+    try:
+        # Create a new chatbot instance per request.
+        # It will automatically load memory based on user_id.
+        chatbot = DeviceFinderChatbot(user_id=user_id, llm_provider=llm_instance)
+        
+        # Get response from the chatbot
+        ai_response = chatbot.get_response(chat_message.message)
+        
+        return {"response": ai_response}
+
+    except RateLimitExceeded as e:
+        print(f"Chatbot - Rate limit exceeded for user {username} ({user_id}): {e.message}")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"{e.message}. Please try again after {e.retry_after} seconds."
+        )
+    except Exception as e:
+        print(f"Chatbot - An unexpected error occurred for user {username} ({user_id}): {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal error occurred while processing your request. Please try again."
+        )
+
+# --- Optional: Endpoint to clear user's chat history ---
+@app.delete("/chat/clear_history", summary="Clear chat history for current user (Requires Auth)")
+async def clear_chat_history(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Clears the chat history for the currently authenticated user.
+    """
+    user_id = current_user["id"]
+    username = current_user["username"]
+
+    try:
+        memory = DeviceFinderMemory(session_id=user_id)
+        memory.clear_memory()
+        print(f"Chatbot - Chat history cleared for user {username} ({user_id}).")
+        return {"message": "Chat history cleared successfully."}
+    except Exception as e:
+        print(f"Chatbot - Error clearing chat history for user {username} ({user_id}): {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An internal error occurred while clearing chat history."
+        )
 
 
 if __name__ == "__main__":
