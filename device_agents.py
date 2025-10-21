@@ -496,9 +496,15 @@ class PCBuilderAgent(BaseAgent):
                 params = self.safe_json_loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
+                if not budget or budget == "null":
+                    budget = user_request.get("budget", 0)
             except Exception:
                 location = user_request.get("location", "")
-                budget = user_request.get("budget")
+                budget = user_request.get("budget", 0)
+            finally:
+                print(f"[DEBUG] Final extracted location: {location}, budget: {budget}")
+
+
 
             formatted_results, source = None, None
             search_prompt = f"""
