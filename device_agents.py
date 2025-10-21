@@ -51,7 +51,7 @@ class BaseAgent:
         import re
 
         # Normalize quotes
-        text = text.replace("“", '"').replace("”", '"').replace("’", "'")
+        text = text.replace(""", '"').replace(""", '"').replace("'", "'")
 
         # Fix stray commas before closing braces/brackets
         text = re.sub(r",\s*([\]}])", r"\1", text)
@@ -59,48 +59,176 @@ class BaseAgent:
         # Fix unescaped inch marks like 27" Monitor → 27\" Monitor
         text = re.sub(r'(\d)"(?=[^:,\}\]])', r'\1\\"', text)
 
-        # Fix quotes that break after URLs (missing closing quote)
-        # Example: "url": "https://something.com/  →  "url": "https://something.com/"
+        # FIX 1: Handle URLs with missing closing quotes
+        # This regex finds URLs that end with / followed by a newline without a closing quote
         text = re.sub(
-            r'("url"\s*:\s*")([^"]+)(?=\s*[\r\n,}])',
-            lambda m: m.group(1) + m.group(2).rstrip("/") + '"/',
+            r'("url"\s*:\s*")(https?://[^"\n]+?)(/)\s*\n',
+            r'\1\2\3"\n',
             text
         )
-        text = text.replace('"/', '"')  # cleanup from regex above
 
-        # Fix stray double quotes immediately following a URL (like https://foo.com")
-        text = re.sub(r'(https?:\/\/[^\s"]+)"', r'\1', text)
+        # FIX 2: More robust URL quote fixing - catches URLs missing closing quotes before newlines
+        text = re.sub(
+            r'("url"\s*:\s*"https?://[^"\n]+)(\s*[\r\n]+\s*[},\]])',
+            r'\1"\2',
+            text
+        )
+
+        # FIX 3: Escape unescaped newlines and tabs inside string values
+        # This prevents "Invalid control character" errors
+        lines = text.split('\n')
+        fixed_lines = []
+        in_string = False
+        
+        for line in lines:
+            # Simple state tracking for strings (not perfect but helps)
+            quote_count = line.count('"') - line.count('\\"')
+            if quote_count % 2 == 1:
+                in_string = not in_string
+            
+            fixed_lines.append(line)
+        
+        text = '\n'.join(fixed_lines)
+
+        # FIX 4: Remove any literal \n or \t that might have been inserted
+        # Replace them with escaped versions only inside string values
+        text = re.sub(r'(?<=": ")([^"]*?)\\n([^"]*?)(?=")', lambda m: m.group(0).replace('\\n', ' '), text)
+        text = re.sub(r'(?<=": ")([^"]*?)\\t([^"]*?)(?=")', lambda m: m.group(0).replace('\\t', ' '), text)
 
         return text.strip()
 
-
     @staticmethod
     def safe_json_loads(text):
-        """Attempts to load JSON safely, even with minor LLM formatting issues."""
+        """Attempts to load JSON safely with comprehensive error handling."""
+        import re
+        import json
+        
+        if not text or not text.strip():
+            print("[ERROR] Empty text provided to safe_json_loads")
+            return None
+        
         try:
-            # Extract the JSON portion if extra text exists
+            # Step 1: Extract JSON portion if embedded in other text
             match = re.search(r'(\{.*\}|\[.*\])', text, re.DOTALL)
             if match:
                 text = match.group(1)
-
-            # Attempt normal JSON parse
+            
+            # Step 2: Attempt normal JSON parse
             return json.loads(text)
+            
         except json.JSONDecodeError as e:
-            print(f"[WARN] JSON parsing failed: {e}\nTrying to auto-fix...")
-
-            # Auto-fix common issues like unescaped quotes or trailing commas
-            fixed = re.sub(r',\s*([\]}])', r'\1', text)
-            fixed = re.sub(r'(?<=\d)"(?=[^:,\}\]])', '\\"', fixed)
+            print(f"[WARN] Initial JSON parsing failed: {e}")
+            print(f"[WARN] Error location: line {e.lineno}, column {e.colno}")
+            
             try:
+                # Step 3: Apply aggressive fixes
+                fixed = text
+                
+                # Fix 1: Remove trailing commas
+                fixed = re.sub(r',\s*([\]}])', r'\1', fixed)
+                
+                # Fix 2: Escape unescaped quotes in numbers (like 27")
+                fixed = re.sub(r'(\d)"(?=[^:,\}\]])', r'\1\\"', fixed)
+                
+                # Fix 3: Fix URLs missing closing quotes before newlines
+                fixed = re.sub(
+                    r'("url"\s*:\s*"https?://[^"\n]+)(\s*[\r\n])',
+                    r'\1"\2',
+                    fixed
+                )
+                
+                # Fix 4: Remove control characters (tabs, newlines) inside strings
+                # Split by lines and rejoin, ensuring no literal control chars in strings
+                lines = fixed.split('\n')
+                cleaned_lines = []
+                for line in lines:
+                    # Remove literal \n and \t inside string values
+                    line = re.sub(r'\\[nt]', ' ', line)
+                    cleaned_lines.append(line)
+                fixed = '\n'.join(cleaned_lines)
+                
+                # Fix 5: Ensure all quotes are balanced
+                # Count quotes per line to detect unclosed strings
+                lines = fixed.split('\n')
+                for i, line in enumerate(lines):
+                    # Skip empty lines
+                    if not line.strip():
+                        continue
+                    # Count non-escaped quotes
+                    quote_count = len(re.findall(r'(?<!\\)"', line))
+                    # If odd number, likely missing closing quote
+                    if quote_count % 2 == 1 and not line.rstrip().endswith(','):
+                        # Try adding closing quote before newline
+                        if '"url"' in line and 'https://' in line:
+                            lines[i] = line.rstrip() + '"'
+                
+                fixed = '\n'.join(lines)
+                
+                print("[INFO] Attempting parse with auto-fixes...")
                 return json.loads(fixed)
-            except Exception as e2:
-                print(f"[ERROR] Final parse failed: {e2}\nRaw text:\n{text}\n")
+                
+            except json.JSONDecodeError as e2:
+                print(f"[ERROR] Auto-fix parse failed: {e2}")
+                print(f"[ERROR] Error location: line {e2.lineno}, column {e2.colno}")
+                
+                # Show context around the error
+                lines = text.split('\n')
+                if e2.lineno <= len(lines):
+                    error_line = lines[e2.lineno - 1]
+                    print(f"[ERROR] Problem line {e2.lineno}: {error_line}")
+                    if e2.colno and e2.colno < len(error_line):
+                        print(f"[ERROR] Problem character: '{error_line[e2.colno]}'")
+                
+                print(f"[ERROR] Full text:\n{text}\n")
                 return None
+                
         except Exception as e:
-            print(f"[ERROR] Unexpected JSON error: {e}\nRaw text:\n{text}\n")
+            print(f"[ERROR] Unexpected error in safe_json_loads: {e}")
+            print(f"[ERROR] Text: {text[:500]}...")  # Show first 500 chars
             return None
 
+# Add this method to your BaseAgent class:
 
+    def _validate_response(self, response: dict) -> dict:
+        """Validate and sanitize agent response before returning."""
+        if response is None:
+            return {
+                "error": "Agent produced null response",
+                "status": "failed",
+                "recommendations": []
+            }
+        
+        # Ensure required keys exist
+        if "recommendations" not in response:
+            response["recommendations"] = []
+        
+        if "metadata" not in response:
+            response["metadata"] = {
+                "generated_at": datetime.utcnow().isoformat() + "Z",
+                "status": "partial"
+            }
+        
+        # Clean up any remaining control characters in strings
+        import json
+        try:
+            # Serialize and deserialize to ensure it's valid JSON
+            json_str = json.dumps(response, ensure_ascii=False)
+            response = json.loads(json_str)
+        except Exception as e:
+            print(f"[ERROR] Response validation failed: {e}")
+            return {
+                "error": f"Response validation failed: {str(e)}",
+                "status": "failed",
+                "partial_data": response
+            }
+        
+        return response
+
+# Then update the end of each agent's handle_request method:
+# OLD:
+# return self.safe_json_loads(cleaned)
+
+# NEW:
 
 # ============================================================
 # PHONE AGENT
@@ -187,7 +315,8 @@ class PhoneAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return self.safe_json_loads(cleaned)
+            result = self.safe_json_loads(cleaned)
+            return self._validate_response(result)
 
         except Exception as e:
             return {"error": str(e), "status": "failed", "user_request": user_request}
@@ -268,7 +397,8 @@ class LaptopAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return self.safe_json_loads(cleaned)
+            result = self.safe_json_loads(cleaned)
+            return self._validate_response(result)
 
         except Exception as e:
             return {"error": str(e), "status": "failed", "user_request": user_request}
@@ -347,7 +477,8 @@ class TabletAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return self.safe_json_loads(cleaned)
+            result = self.safe_json_loads(cleaned)
+            return self._validate_response(result)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
@@ -425,7 +556,8 @@ class EarpieceAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return self.safe_json_loads(cleaned)
+            result = self.safe_json_loads(cleaned)
+            return self._validate_response(result)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
@@ -504,7 +636,8 @@ class PreBuiltPCAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return self.safe_json_loads(cleaned)
+            result = self.safe_json_loads(cleaned)
+            return self._validate_response(result)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
@@ -578,22 +711,37 @@ class PCBuilderAgent(BaseAgent):
 
                     res = search_tool.get_organic_results(q_str, num_results=3)
                     part_results.append({"query": q_str, "results": res})
+# In the PCBuilderAgent's handle_request method, update the final_prompt:
+
             final_prompt = f"""
             {self.builder_prompt}
             User request: {user_request_str}
             Source: {source}
             Data: {formatted_results}
             Timestamp: {datetime.utcnow().isoformat()}Z
-            VERY IMPORTANT!!!
-            System message:
-            - Output only valid JSON (no Markdown, no text before/after).
-            - Use double quotes for all keys and string values.
-            - Ensure every field, array, and object is closed properly.
-            - Escape any double quotes within strings.
+
+            CRITICAL JSON FORMATTING REQUIREMENTS:
+            1. Output ONLY valid JSON - no Markdown, no text before/after
+            2. Use double quotes for ALL keys and string values
+            3. Every URL MUST be on a single line with proper closing quotes
+            4. Ensure every field, array, and object is properly closed
+            5. Escape any double quotes within strings using backslash
+            6. Do NOT include newlines inside string values
+            7. All URLs must follow this exact format: "url": "https://example.com/path"
+            8. Verify closing quotes exist for ALL string fields before newlines
+
+            Example of correct URL formatting:
+            "vendor_online": {{
+            "store": "Example Store",
+            "url": "https://example.com/product"
+            }},
+
+            Return your response as a single, valid JSON object.
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return self.safe_json_loads(cleaned)
+            result = self.safe_json_loads(cleaned)
+            return self._validate_response(result)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
