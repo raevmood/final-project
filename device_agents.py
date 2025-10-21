@@ -49,6 +49,7 @@ class BaseAgent:
         return text.strip()
     import re, json
 
+    @staticmethod
     def safe_json_loads(text):
         """Attempts to load JSON safely, even with minor LLM formatting issues."""
         try:
