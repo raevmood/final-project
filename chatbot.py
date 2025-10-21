@@ -1,7 +1,7 @@
 # device_finder_chatbot.py
 from typing import List, Optional
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate, SystemMessagePromptTemplate
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from prompts import chatbot_prompt
 from memory import DeviceFinderMemory
 from llm_provider import LLMProvider 
@@ -43,7 +43,7 @@ class DeviceFinderChatbot:
             
             message_string = ""
             for msg in formatted_prompt:
-                if isinstance(msg, SystemMessagePromptTemplate):
+                if isinstance(msg, SystemMessage):
                     message_string += f"System: {msg.content}\n"
                 elif isinstance(msg, HumanMessage):
                     message_string += f"User: {msg.content}\n"
@@ -60,3 +60,7 @@ class DeviceFinderChatbot:
                 self.memory.messages.pop()
                 self.memory.save_memory() 
             return "I apologize, but I'm having trouble connecting right now. Please try again in a moment."
+        
+
+if __name__ == "__main__":
+    print(chatbot_prompt)
