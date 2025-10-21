@@ -6,6 +6,7 @@ Simple, transparent agents with tool access and JSON-safe parsing.
 import json
 import re
 from datetime import datetime
+from llm_provider import RateLimitExceeded
 from typing import Dict, Any
 
 
@@ -18,6 +19,7 @@ class BaseAgent:
     def __init__(self, llm):
         self.llm = llm
         self.tools = {}
+        self.current_user_id = None
 
     def register_tool(self, name, tool):
         """Register an external tool."""
@@ -27,12 +29,8 @@ class BaseAgent:
         print(f"✓ Registered tool: {name}")
 
     def contact(self, prompt):
-        """Query the connected LLM."""
-        return self.llm.generate(prompt)
-
-    # ---------------------------
-    # JSON Handling Utilities
-    # ---------------------------
+        """Query the connected LLM with rate limiting."""
+        return self.llm.generate(prompt, user_id=self.current_user_id)
 
     def _extract_json_from_markdown(self, text: str) -> str:
         """Extract JSON whether it’s inside markdown or plain text."""
@@ -86,9 +84,6 @@ class BaseAgent:
             text = re.sub(r'(?<=": ")([^"]*?)\\t([^"]*?)(?=")', lambda m: m.group(0).replace('\\t', ' '), text)
 
             # NEW FIX 6: Quote unquoted string values for specific fields (e.g., email, phone numbers)
-            # This targets key-value pairs where the value is clearly a string but unquoted.
-            # This is a bit aggressive, adjust regex for specific fields if it quotes too much.
-            # For phone numbers (starts with 0, or looks like a number but needs quotes)
             text = re.sub(
                 r'("store_phone_number"\s*:\s*)([0-9]+)(\s*[,\]}])',
                 r'\1"\2"\3',
@@ -100,15 +95,6 @@ class BaseAgent:
                 r'\1"\2"\3',
                 text
             )
-            # General unquoted string values that appear after a colon and before a comma/brace
-            # Use with caution, can misquote valid numbers if not careful.
-            # Only enable if the above targeted fixes aren't enough, and adjust.
-            # text = re.sub(
-            #     r':\s*([a-zA-Z0-9._%+-]+)(,\n|\n|})',
-            #     r': "\1"\2',
-            #     text
-            # )
-
             return text.strip()
 
     @staticmethod
@@ -262,10 +248,8 @@ class BaseAgent:
                 response["error"] = "No valid recommendations found in response"
                 response["status"] = "failed"
         
-        # Clean up any remaining control characters in strings
         import json
         try:
-            # Serialize and deserialize to ensure it's valid JSON
             json_str = json.dumps(response, ensure_ascii=False)
             response = json.loads(json_str)
         except Exception as e:
@@ -279,21 +263,10 @@ class BaseAgent:
                     "status": "failed"
                 }
             }
-        
-        # Add debugging info in development
         print(f"[DEBUG] Validated response has {len(response.get('recommendations', []))} recommendations")
         
         return response
-
-# Then update the end of each agent's handle_request method:
-# OLD:
-# return self.safe_json_loads(cleaned)
-
-# NEW:
-
-# ============================================================
-# PHONE AGENT
-# ============================================================
+    
 class PhoneAgent(BaseAgent):
     """Handles smartphone recommendations with DB-first fallback search."""
 
@@ -301,11 +274,10 @@ class PhoneAgent(BaseAgent):
         super().__init__(llm)
         self.phone_prompt = prompt_template
 
-    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
+    def handle_request(self, user_request: Dict[str, Any], user_id: str = None) -> Dict[str, Any]:
+        self.current_user_id = user_id  # Set for rate limiting
         try:
             user_request_str = json.dumps(user_request, indent=2)
-
-            # Step 1: Extract location and budget
             extraction_prompt = f"""
             Extract location and budget from this request:
             {user_request_str}
@@ -322,8 +294,6 @@ class PhoneAgent(BaseAgent):
             except Exception:
                 location = user_request.get("location", "")
                 budget = user_request.get("budget")
-
-            # Step 2: Query Vector DB
             formatted_results, source = None, None
             vector_tool = self.tools.get("vector_db")
 
@@ -338,8 +308,6 @@ class PhoneAgent(BaseAgent):
                 if vector_results and len(vector_results) >= 3:
                     formatted_results = json.dumps(vector_results, indent=2)
                     source = "Vector Database"
-
-            # Step 3: Fallback to Serper
             if not formatted_results:
                 search_prompt = f"""
                 Create a search query for finding phones based on:
@@ -360,8 +328,6 @@ class PhoneAgent(BaseAgent):
                     search_results = search_tool.get_organic_results(search_query, num_results=5)
                     formatted_results = search_tool.format_results(search_results)
                     source = "Web Search"
-
-            # Step 4: Final recommendation
             final_prompt = f"""
             {self.phone_prompt}
 
@@ -393,7 +359,8 @@ class LaptopAgent(BaseAgent):
         super().__init__(llm)
         self.laptop_prompt = prompt_template
 
-    def handle_request(self, user_request):
+    def handle_request(self, user_request, user_id: str = None):
+        self.current_user_id = user_id
         try:
             user_request_str = json.dumps(user_request, indent=2)
             extraction_prompt = f"""
@@ -475,7 +442,8 @@ class TabletAgent(BaseAgent):
         super().__init__(llm)
         self.tablet_prompt = prompt_template
 
-    def handle_request(self, user_request):
+    def handle_request(self, user_request, user_id: str = None):
+        self.current_user_id = user_id
         try:
             user_request_str = json.dumps(user_request, indent=2)
             extraction_prompt = f"""
@@ -554,7 +522,8 @@ class EarpieceAgent(BaseAgent):
         super().__init__(llm)
         self.earpiece_prompt = prompt_template
 
-    def handle_request(self, user_request):
+    def handle_request(self, user_request, user_id: str = None):
+        self.current_user_id = user_id
         try:
             user_request_str = json.dumps(user_request, indent=2)
             extraction_prompt = f"""
@@ -633,7 +602,8 @@ class PreBuiltPCAgent(BaseAgent):
         super().__init__(llm)
         self.pc_prompt = prompt_template
 
-    def handle_request(self, user_request):
+    def handle_request(self, user_request, user_id: str = None):
+        self.current_user_id = user_id
         try:
             user_request_str = json.dumps(user_request, indent=2)
             extraction_prompt = f"""
@@ -713,7 +683,8 @@ class PCBuilderAgent(BaseAgent):
         super().__init__(llm)
         self.builder_prompt = prompt_template
 
-    def handle_request(self, user_request):
+    def handle_request(self, user_request, user_id: str = None):
+        self.current_user_id = user_id
         try:
             user_request_str = json.dumps(user_request, indent=2)
             extraction_prompt = f"""
@@ -772,8 +743,6 @@ class PCBuilderAgent(BaseAgent):
 
                     res = search_tool.get_organic_results(q_str, num_results=3)
                     part_results.append({"query": q_str, "results": res})
-# In the PCBuilderAgent's handle_request method, update the final_prompt:
-
             final_prompt = f"""
             {self.builder_prompt}
             User request: {user_request_str}
@@ -799,18 +768,15 @@ class PCBuilderAgent(BaseAgent):
 
             Return your response as a single, valid JSON object.
             """
-# In PCBuilderAgent.handle_request, after llm_output = self.contact(final_prompt)
             llm_output = self.contact(final_prompt)
-
-            # ADD THIS DEBUGGING BLOCK
             print("[DEBUG] ===== PC Builder LLM Raw Output =====")
-            print(llm_output[:1000])  # Print first 1000 chars
+            print(llm_output[:1000])  
             print("[DEBUG] =====================================")
 
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
 
             print("[DEBUG] ===== PC Builder Cleaned JSON =====")
-            print(cleaned[:1000])  # Print first 1000 chars
+            print(cleaned[:1000]) 
             print("[DEBUG] ====================================")
 
             result = self.safe_json_loads(cleaned)
@@ -830,7 +796,6 @@ class PCBuilderAgent(BaseAgent):
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
-# Factory functions for easy agent creation
 def create_phone_agent(llm, vector_db, serper_tool):
     """Create and configure a phone agent."""
     from prompts import phone_prompt
@@ -888,16 +853,10 @@ if __name__ == "__main__":
     from llm_provider import LLMProvider
     from vector_db_tool import VectorDBTool
     from serper_tool import SerperSearchTool
-    
-    # Initialize
     llm = LLMProvider()
     vector_db = VectorDBTool()
     serper = SerperSearchTool()
-    
-    # Create phone agent
     phone_agent = create_phone_agent(llm, vector_db, serper)
-    
-    # Test
     request = {
         "location": "Nairobi, Kenya",
         "budget": 45000,

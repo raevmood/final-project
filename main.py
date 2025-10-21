@@ -235,7 +235,10 @@ async def find_phone(
     UserStore.increment_search_count(current_user['username'])
     
     try:
-        result_dict = phone_agent.handle_request(request.dict(exclude_none=True))
+        result_dict = phone_agent.handle_request(
+            request.dict(exclude_none=True),
+            user_id=str(current_user['id'])
+            )
         return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
@@ -254,7 +257,9 @@ async def find_laptop(
     UserStore.increment_search_count(current_user['username'])
     
     try:
-        result_dict = laptop_agent.handle_request(request.dict(exclude_none=True))
+        result_dict = laptop_agent.handle_request(
+            request.dict(exclude_none=True),
+            user_id=str(current_user['id']))
         return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
@@ -273,7 +278,9 @@ async def find_tablet(
     UserStore.increment_search_count(current_user['username'])
     
     try:
-        result_dict = tablet_agent.handle_request(request.dict(exclude_none=True))
+        result_dict = tablet_agent.handle_request(
+            request.dict(exclude_none=True),
+            user_id=str(current_user['id']))
         return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
@@ -292,7 +299,9 @@ async def find_earpiece(
     UserStore.increment_search_count(current_user['username'])
     
     try:
-        result_dict = earpiece_agent.handle_request(request.dict(exclude_none=True))
+        result_dict = earpiece_agent.handle_request(
+            request.dict(exclude_none=True),
+            user_id=str(current_user['id']))
         return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
@@ -311,7 +320,9 @@ async def find_prebuilt_pc(
     UserStore.increment_search_count(current_user['username'])
     
     try:
-        result_dict = prebuilt_pc_agent.handle_request(request.dict(exclude_none=True))
+        result_dict = prebuilt_pc_agent.handle_request(
+            request.dict(exclude_none=True),
+            user_id=str(current_user['id']))
         return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
@@ -330,7 +341,9 @@ async def build_custom_pc(
     UserStore.increment_search_count(current_user['username'])
     
     try:
-        result_dict = pc_builder_agent.handle_request(request.dict(exclude_none=True))
+        result_dict = pc_builder_agent.handle_request(
+            request.dict(exclude_none=True),
+            user_id=str(current_user['id']))
         return result_dict
     except ValueError as ve:
         raise HTTPException(status_code=500, detail=f"Agent could not produce valid final JSON: {str(ve)}")
