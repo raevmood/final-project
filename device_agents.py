@@ -30,6 +30,10 @@ class BaseAgent:
         """Query the connected LLM."""
         return self.llm.generate(prompt)
 
+    # ---------------------------
+    # JSON Handling Utilities
+    # ---------------------------
+
     def _extract_json_from_markdown(self, text: str) -> str:
         """Extract JSON whether it’s inside markdown or plain text."""
         match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
@@ -67,14 +71,27 @@ class BaseAgent:
     def safe_json_loads(text):
         """Attempts to load JSON safely, even with minor LLM formatting issues."""
         try:
-            # Find the first and last braces/brackets
+            # Extract the JSON portion if extra text exists
             match = re.search(r'(\{.*\}|\[.*\])', text, re.DOTALL)
             if match:
                 text = match.group(1)
+
+            # Attempt normal JSON parse
             return json.loads(text)
+        except json.JSONDecodeError as e:
+            print(f"[WARN] JSON parsing failed: {e}\nTrying to auto-fix...")
+
+            # Auto-fix common issues like unescaped quotes or trailing commas
+            fixed = re.sub(r',\s*([\]}])', r'\1', text)
+            fixed = re.sub(r'(?<=\d)"(?=[^:,\}\]])', '\\"', fixed)
+            try:
+                return json.loads(fixed)
+            except Exception as e2:
+                print(f"[ERROR] Final parse failed: {e2}\nRaw text:\n{text}\n")
+                return None
         except Exception as e:
-            print(f"[WARN] JSON parsing failed: {e}\nRaw text:\n{text}\n")
-        return None
+            print(f"[ERROR] Unexpected JSON error: {e}\nRaw text:\n{text}\n")
+            return None
 
 
 
