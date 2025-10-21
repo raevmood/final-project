@@ -43,11 +43,25 @@ class BaseAgent:
         return text.strip()
 
     def _clean_json_text(self, text: str) -> str:
-        """Fixes common JSON formatting issues."""
+        """Cleans and sanitizes JSON-like text before parsing."""
+        text = text.strip()
+
+        # Remove markdown wrappers
+        text = text.replace("```json", "").replace("```", "")
+
+        # Replace smart quotes
         text = text.replace("“", '"').replace("”", '"').replace("’", "'")
+
+        # Fix trailing commas
         text = re.sub(r",\s*([\]}])", r"\1", text)
-        return text.strip()
-    import re, json
+
+        # Escape unescaped quotes (e.g. 27" Monitor → 27\" Monitor)
+        text = re.sub(r'(?<=\d)"(?=[^:,\}\]])', '\\"', text)
+
+        # Remove control characters
+        text = re.sub(r'[\x00-\x1F]+', '', text)
+
+        return text
 
     @staticmethod
     def safe_json_loads(text):
