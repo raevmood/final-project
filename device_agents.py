@@ -47,6 +47,20 @@ class BaseAgent:
         text = text.replace("“", '"').replace("”", '"').replace("’", "'")
         text = re.sub(r",\s*([\]}])", r"\1", text)
         return text.strip()
+    import re, json
+
+    def safe_json_loads(text):
+        """Attempts to load JSON safely, even with minor LLM formatting issues."""
+        try:
+            # Find the first and last braces/brackets
+            match = re.search(r'(\{.*\}|\[.*\])', text, re.DOTALL)
+            if match:
+                text = match.group(1)
+            return json.loads(text)
+        except Exception as e:
+            print(f"[WARN] JSON parsing failed: {e}\nRaw text:\n{text}\n")
+        return None
+
 
 
 # ============================================================
@@ -70,10 +84,11 @@ class PhoneAgent(BaseAgent):
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
             params_raw = self.contact(extraction_prompt)
+            print(f"[DEBUG] Raw extraction response: {params_raw}")
             params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
 
             try:
-                params = json.loads(params_cleaned)
+                params = self.safe_json_loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except Exception:
@@ -106,7 +121,7 @@ class PhoneAgent(BaseAgent):
                 decision_raw = self.contact(search_prompt)
                 decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
                 try:
-                    decision = json.loads(decision_cleaned)
+                    decision = self.safe_json_loads(decision_cleaned)
                     search_query = decision.get("search_query", "")
                 except Exception:
                     specs = f"{user_request.get('ram', '')} {user_request.get('storage', '')} smartphone"
@@ -133,7 +148,7 @@ class PhoneAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return json.loads(cleaned)
+            return self.safe_json_loads(cleaned)
 
         except Exception as e:
             return {"error": str(e), "status": "failed", "user_request": user_request}
@@ -158,10 +173,11 @@ class LaptopAgent(BaseAgent):
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
             params_raw = self.contact(extraction_prompt)
+            print(f"[DEBUG] Raw extraction response: {params_raw}")
             params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
 
             try:
-                params = json.loads(params_cleaned)
+                params = self.safe_json_loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except Exception:
@@ -191,7 +207,7 @@ class LaptopAgent(BaseAgent):
                 decision_raw = self.contact(search_prompt)
                 decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
                 try:
-                    decision = json.loads(decision_cleaned)
+                    decision = self.safe_json_loads(decision_cleaned)
                     search_query = decision.get("search_query", "")
                 except Exception:
                     usage = user_request.get("usage", "general")
@@ -213,7 +229,7 @@ class LaptopAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return json.loads(cleaned)
+            return self.safe_json_loads(cleaned)
 
         except Exception as e:
             return {"error": str(e), "status": "failed", "user_request": user_request}
@@ -237,9 +253,10 @@ class TabletAgent(BaseAgent):
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
             params_raw = self.contact(extraction_prompt)
+            print(f"[DEBUG] Raw extraction response: {params_raw}")
             params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
             try:
-                params = json.loads(params_cleaned)
+                params = self.safe_json_loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except Exception:
@@ -270,7 +287,7 @@ class TabletAgent(BaseAgent):
                 decision_raw = self.contact(search_prompt)
                 decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
                 try:
-                    decision = json.loads(decision_cleaned)
+                    decision = self.safe_json_loads(decision_cleaned)
                     search_query = decision.get("search_query", "")
                 except Exception:
                     search_query = f"tablet {location} under {budget}"
@@ -291,7 +308,7 @@ class TabletAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return json.loads(cleaned)
+            return self.safe_json_loads(cleaned)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
@@ -314,9 +331,10 @@ class EarpieceAgent(BaseAgent):
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
             params_raw = self.contact(extraction_prompt)
+            print(f"[DEBUG] Raw extraction response: {params_raw}")
             params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
             try:
-                params = json.loads(params_cleaned)
+                params = self.safe_json_loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except Exception:
@@ -347,7 +365,7 @@ class EarpieceAgent(BaseAgent):
                 decision_raw = self.contact(search_prompt)
                 decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
                 try:
-                    decision = json.loads(decision_cleaned)
+                    decision = self.safe_json_loads(decision_cleaned)
                     search_query = decision.get("search_query", "")
                 except Exception:
                     search_query = f"earpiece {location} under {budget}"
@@ -368,7 +386,7 @@ class EarpieceAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return json.loads(cleaned)
+            return self.safe_json_loads(cleaned)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
@@ -392,9 +410,10 @@ class PreBuiltPCAgent(BaseAgent):
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
             params_raw = self.contact(extraction_prompt)
+            print(f"[DEBUG] Raw extraction response: {params_raw}")
             params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
             try:
-                params = json.loads(params_cleaned)
+                params = self.safe_json_loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except Exception:
@@ -425,7 +444,7 @@ class PreBuiltPCAgent(BaseAgent):
                 decision_raw = self.contact(search_prompt)
                 decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
                 try:
-                    decision = json.loads(decision_cleaned)
+                    decision = self.safe_json_loads(decision_cleaned)
                     search_query = decision.get("search_query", "")
                 except Exception:
                     search_query = f"prebuilt gaming PC {location} under {budget}"
@@ -446,7 +465,7 @@ class PreBuiltPCAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return json.loads(cleaned)
+            return self.safe_json_loads(cleaned)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
@@ -470,9 +489,10 @@ class PCBuilderAgent(BaseAgent):
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
             params_raw = self.contact(extraction_prompt)
+            print(f"[DEBUG] Raw extraction response: {params_raw}")
             params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
             try:
-                params = json.loads(params_cleaned)
+                params = self.safe_json_loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
             except Exception:
@@ -488,7 +508,7 @@ class PCBuilderAgent(BaseAgent):
             decision_raw = self.contact(search_prompt)
             decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
             try:
-                decision = json.loads(decision_cleaned)
+                decision = self.safe_json_loads(decision_cleaned)
                 queries = decision.get("search_queries", [])
             except Exception:
                 queries = [f"gaming pc parts {location} under {budget}"]
@@ -512,7 +532,7 @@ class PCBuilderAgent(BaseAgent):
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
-            return json.loads(cleaned)
+            return self.safe_json_loads(cleaned)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
