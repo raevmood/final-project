@@ -82,11 +82,26 @@ class VectorDBTool:
             device_id = f"{category}_{location}_{device.get('name', '')}_{i}_{timestamp}"
             ids.append(device_id.replace(" ", "_").lower())
         
+        # --- Sanitize metadata values to ensure ChromaDB compatibility ---
+        sanitized_metadatas = []
+        for metadata in metadatas:
+            clean_meta = {}
+            for k, v in metadata.items():
+                if isinstance(v, list):
+                    clean_meta[k] = ", ".join(map(str, v))  # Convert lists to comma-separated strings
+                elif isinstance(v, (dict, set)):
+                    clean_meta[k] = json.dumps(v, ensure_ascii=False)  # Store dicts as JSON strings
+                else:
+                    clean_meta[k] = v
+            sanitized_metadatas.append(clean_meta)
+
+        # --- Add to ChromaDB ---
         self.collection.add(
             documents=documents,
-            metadatas=metadatas,
+            metadatas=sanitized_metadatas,
             ids=ids
         )
+
         
         return len(devices)
     
