@@ -524,11 +524,13 @@ class PCBuilderAgent(BaseAgent):
             if search_tool:
                 part_results = []
                 for q in queries:
-                    res = search_tool.get_organic_results(q, num_results=3)
-                    part_results.append({q: res})
-                formatted_results = json.dumps(part_results, indent=2)
-                source = "Web Search"
+                    if isinstance(q, dict):
+                        q_str = list(q.values())[0] if q else ""
+                    else:
+                        q_str = str(q)
 
+                    res = search_tool.get_organic_results(q_str, num_results=3)
+                    part_results.append({"query": q_str, "results": res})
             final_prompt = f"""
             {self.builder_prompt}
             User request: {user_request_str}
