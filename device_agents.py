@@ -47,29 +47,32 @@ class BaseAgent:
         return text.strip()
 
     def _clean_json_text(self, text: str) -> str:
-        """Cleans and sanitizes JSON-like text before parsing."""
-        text = text.strip()
+        """Fixes common JSON formatting issues in LLM output."""
+        import re
 
-        # Remove markdown wrappers
-        text = text.replace("```json", "").replace("```", "")
-
-        # Replace smart quotes
+        # Normalize quotes
         text = text.replace("“", '"').replace("”", '"').replace("’", "'")
 
-        # Fix trailing commas
+        # Fix stray commas before closing braces/brackets
         text = re.sub(r",\s*([\]}])", r"\1", text)
 
-        # Escape unescaped quotes (e.g. 27" Monitor → 27\" Monitor)
-# Fix stray quotes at the end of URLs or words (e.g. 200000" → 200000")
-        text = re.sub(r'(https?:\/\/[^\s"]+)"', r'\1', text)
-
-# Escape unescaped quotes in model names like 27" Monitor → 27\" Monitor
+        # Fix unescaped inch marks like 27" Monitor → 27\" Monitor
         text = re.sub(r'(\d)"(?=[^:,\}\]])', r'\1\\"', text)
 
-        # Remove control characters
-        text = re.sub(r'[\x00-\x1F]+', '', text)
+        # Fix quotes that break after URLs (missing closing quote)
+        # Example: "url": "https://something.com/  →  "url": "https://something.com/"
+        text = re.sub(
+            r'("url"\s*:\s*")([^"]+)(?=\s*[\r\n,}])',
+            lambda m: m.group(1) + m.group(2).rstrip("/") + '"/',
+            text
+        )
+        text = text.replace('"/', '"')  # cleanup from regex above
 
-        return text
+        # Fix stray double quotes immediately following a URL (like https://foo.com")
+        text = re.sub(r'(https?:\/\/[^\s"]+)"', r'\1', text)
+
+        return text.strip()
+
 
     @staticmethod
     def safe_json_loads(text):
@@ -523,6 +526,11 @@ class PCBuilderAgent(BaseAgent):
             Extract location and budget from:
             {user_request_str}
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
+            Return your answer as **STRICT JSON**. 
+            Your response MUST:
+            - Be enclosed in curly braces
+            - Use double quotes for all keys and string values
+            - Use a number (not string) for the budget field
             """
             params_raw = self.contact(extraction_prompt)
             print(f"[DEBUG] Raw extraction response: {params_raw}")
@@ -546,6 +554,10 @@ class PCBuilderAgent(BaseAgent):
             Create search queries for all PC parts needed based on:
             {user_request_str}
             Return ONLY JSON: {{"search_queries": ["CPU query", "GPU query", "RAM query", ...]}}
+            Ensure:
+            - Each item in "search_queries" is a string.
+            - The JSON is syntactically correct (no trailing commas or comments).
+            - Do not include code blocks or Markdown fences.
             """
             decision_raw = self.contact(search_prompt)
             decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
@@ -572,7 +584,12 @@ class PCBuilderAgent(BaseAgent):
             Source: {source}
             Data: {formatted_results}
             Timestamp: {datetime.utcnow().isoformat()}Z
-            Return ONLY JSON.
+            VERY IMPORTANT!!!
+            System message:
+            - Output only valid JSON (no Markdown, no text before/after).
+            - Use double quotes for all keys and string values.
+            - Ensure every field, array, and object is closed properly.
+            - Escape any double quotes within strings.
             """
             llm_output = self.contact(final_prompt)
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
