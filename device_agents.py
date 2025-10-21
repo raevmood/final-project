@@ -60,38 +60,28 @@ class BaseAgent:
         text = re.sub(r'(\d)"(?=[^:,\}\]])', r'\1\\"', text)
 
         # FIX 1: Handle URLs with missing closing quotes
-        # This regex finds URLs that end with / followed by a newline without a closing quote
         text = re.sub(
             r'("url"\s*:\s*")(https?://[^"\n]+?)(/)\s*\n',
             r'\1\2\3"\n',
             text
         )
 
-        # FIX 2: More robust URL quote fixing - catches URLs missing closing quotes before newlines
+        # FIX 2: More robust URL quote fixing
         text = re.sub(
             r'("url"\s*:\s*"https?://[^"\n]+)(\s*[\r\n]+\s*[},\]])',
             r'\1"\2',
             text
         )
 
-        # FIX 3: Escape unescaped newlines and tabs inside string values
-        # This prevents "Invalid control character" errors
-        lines = text.split('\n')
-        fixed_lines = []
-        in_string = False
-        
-        for line in lines:
-            # Simple state tracking for strings (not perfect but helps)
-            quote_count = line.count('"') - line.count('\\"')
-            if quote_count % 2 == 1:
-                in_string = not in_string
-            
-            fixed_lines.append(line)
-        
-        text = '\n'.join(fixed_lines)
+        # FIX 3: Remove incorrectly escaped closing quotes (e.g., 200000\")
+        # This fixes: "text under 200000\"  →  "text under 200000"
+        text = re.sub(r'([\w\d\s]+)\\"(\s*[,\n\r])', r'\1"\2', text)
 
-        # FIX 4: Remove any literal \n or \t that might have been inserted
-        # Replace them with escaped versions only inside string values
+        # FIX 4: Fix cases where backslash appears before closing quote at end of line
+        # Handles: "query text\"  →  "query text"
+        text = re.sub(r'\\"(\s*$)', r'"\1', text, flags=re.MULTILINE)
+
+        # FIX 5: Remove literal \n or \t inside string values
         text = re.sub(r'(?<=": ")([^"]*?)\\n([^"]*?)(?=")', lambda m: m.group(0).replace('\\n', ' '), text)
         text = re.sub(r'(?<=": ")([^"]*?)\\t([^"]*?)(?=")', lambda m: m.group(0).replace('\\t', ' '), text)
 
