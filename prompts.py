@@ -449,6 +449,9 @@ INPUT INFO
 
 Some fields may be omitted. If missing, infer reasonable defaults 
 based on the user’s location, budget, and use case.
+IMPORTANT!!!
+Never return a blank budget or location field. Always infer moderates in the case of budget, 
+and Nairobi, Kenya as the default location
 
 YOUR TASK
 
