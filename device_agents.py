@@ -185,7 +185,11 @@ class BaseAgent:
             return {
                 "error": "Agent produced null response",
                 "status": "failed",
-                "recommendations": []
+                "recommendations": [],
+                "metadata": {
+                    "generated_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "failed"
+                }
             }
         
         # Ensure required keys exist
@@ -198,6 +202,28 @@ class BaseAgent:
                 "status": "partial"
             }
         
+        # Check if recommendations is empty or invalid
+        if not response["recommendations"]:
+            print("[WARN] Empty recommendations array in response")
+            response["error"] = "No recommendations were generated"
+            response["status"] = "failed"
+            response["metadata"]["status"] = "failed"
+        
+        # Validate recommendations array contains valid data
+        if isinstance(response["recommendations"], list):
+            valid_recs = []
+            for i, rec in enumerate(response["recommendations"]):
+                if rec and isinstance(rec, dict) and (rec.get("name") or rec.get("title")):
+                    valid_recs.append(rec)
+                else:
+                    print(f"[WARN] Invalid recommendation at index {i}: {rec}")
+            
+            response["recommendations"] = valid_recs
+            
+            if not valid_recs:
+                response["error"] = "No valid recommendations found in response"
+                response["status"] = "failed"
+        
         # Clean up any remaining control characters in strings
         import json
         try:
@@ -209,8 +235,15 @@ class BaseAgent:
             return {
                 "error": f"Response validation failed: {str(e)}",
                 "status": "failed",
-                "partial_data": response
+                "partial_data": str(response)[:500],  # Only include first 500 chars
+                "metadata": {
+                    "generated_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "failed"
+                }
             }
+        
+        # Add debugging info in development
+        print(f"[DEBUG] Validated response has {len(response.get('recommendations', []))} recommendations")
         
         return response
 
@@ -728,9 +761,33 @@ class PCBuilderAgent(BaseAgent):
 
             Return your response as a single, valid JSON object.
             """
+# In PCBuilderAgent.handle_request, after llm_output = self.contact(final_prompt)
             llm_output = self.contact(final_prompt)
+
+            # ADD THIS DEBUGGING BLOCK
+            print("[DEBUG] ===== PC Builder LLM Raw Output =====")
+            print(llm_output[:1000])  # Print first 1000 chars
+            print("[DEBUG] =====================================")
+
             cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
+
+            print("[DEBUG] ===== PC Builder Cleaned JSON =====")
+            print(cleaned[:1000])  # Print first 1000 chars
+            print("[DEBUG] ====================================")
+
             result = self.safe_json_loads(cleaned)
+
+            print("[DEBUG] ===== PC Builder Parsed Result =====")
+            if result:
+                print(f"Keys in result: {result.keys()}")
+                if "recommendations" in result:
+                    print(f"Number of recommendations: {len(result.get('recommendations', []))}")
+                if "components" in result:
+                    print(f"Components: {list(result.get('components', {}).keys())}")
+            else:
+                print("Result is None!")
+            print("[DEBUG] ======================================")
+
             return self._validate_response(result)
         except Exception as e:
             return {"error": str(e), "status": "failed"}
