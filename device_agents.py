@@ -1,86 +1,89 @@
 """
 Manual agent implementation for DeviceFinder.AI system.
-Simple, transparent agents with tool access.
+Simple, transparent agents with tool access and JSON-safe parsing.
 """
-import json
-from datetime import datetime
-from typing import Dict, Any, Optional
-import re # <--- ADD THIS IMPORT
 
+import json
+import re
+from datetime import datetime
+from typing import Dict, Any
+
+
+# ============================================================
+# BASE AGENT
+# ============================================================
 class BaseAgent:
-    """Base agent class with tool registration and common utilities."""
-    
+    """Base agent class with shared utilities and tool registration."""
+
     def __init__(self, llm):
         self.llm = llm
         self.tools = {}
-    
+
     def register_tool(self, name, tool):
-        """Register an external tool the agent can use."""
+        """Register an external tool."""
         if tool is None:
             raise ValueError(f"Cannot register None as tool '{name}'")
         self.tools[name] = tool
         print(f"✓ Registered tool: {name}")
-    
+
     def contact(self, prompt):
-        """Contact the LLM with a prompt."""
-        result = self.llm.generate(prompt)
-        return result
+        """Query the connected LLM."""
+        return self.llm.generate(prompt)
 
     def _extract_json_from_markdown(self, text: str) -> str:
-        """
-        Extracts a JSON string from text that might be wrapped in markdown code blocks.
-        Assumes the first JSON block is the desired one.
-        """
-        match = re.search(r"```json\s*\n({.*})\n```", text, re.DOTALL)
+        """Extract JSON whether it’s inside markdown or plain text."""
+        match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
         if match:
-            return match.group(1)
-        
-        # If no markdown block, return original text (might still be valid JSON)
-        return text
+            candidate = match.group(1).strip()
+            if candidate.startswith("{") and candidate.endswith("}"):
+                return candidate
+        match = re.search(r"\{[\s\S]*\}", text)
+        if match:
+            return match.group(0)
+        return text.strip()
+
+    def _clean_json_text(self, text: str) -> str:
+        """Fixes common JSON formatting issues."""
+        text = text.replace("“", '"').replace("”", '"').replace("’", "'")
+        text = re.sub(r",\s*([\]}])", r"\1", text)
+        return text.strip()
 
 
+# ============================================================
+# PHONE AGENT
+# ============================================================
 class PhoneAgent(BaseAgent):
-    """Phone finder agent with vector DB and web search."""
-    
+    """Handles smartphone recommendations with DB-first fallback search."""
+
     def __init__(self, llm, prompt_template):
         super().__init__(llm)
         self.phone_prompt = prompt_template
-    
-    # Changed return type hint to Dict[str, Any]
-    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]: 
-        """Full reasoning pipeline with Vector DB first, then web search fallback."""
+
+    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            # Step 1: Extract parameters from user request
             user_request_str = json.dumps(user_request, indent=2)
+
+            # Step 1: Extract location and budget
             extraction_prompt = f"""
             Extract location and budget from this request:
             {user_request_str}
-            
-            Return ONLY valid JSON in this format:
-            {{"location": "City, Country", "budget": number}}
+            Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
-            
-            params_raw_llm_response = self.contact(extraction_prompt)
-            params_raw_cleaned = self._extract_json_from_markdown(params_raw_llm_response)
-            
+            params_raw = self.contact(extraction_prompt)
+            params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
+
             try:
-                params = json.loads(params_raw_cleaned)
+                params = json.loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
-            except json.JSONDecodeError:
-                print(f"WARNING: PhoneAgent - Failed to parse params_raw JSON (from LLM): {params_raw_llm_response[:200]}... Cleaned: {params_raw_cleaned[:200]}...")
+            except Exception:
                 location = user_request.get("location", "")
                 budget = user_request.get("budget")
-            except Exception as e:
-                print(f"ERROR: PhoneAgent - Error during parameter extraction: {e}. Raw LLM: {params_raw_llm_response[:200]}...")
-                location = user_request.get("location", "")
-                budget = user_request.get("budget")
-            
-            # Step 2: Try Vector DB first
-            formatted_results = None
-            source = None
+
+            # Step 2: Query Vector DB
+            formatted_results, source = None, None
             vector_tool = self.tools.get("vector_db")
-            
+
             if vector_tool and location:
                 vector_results = vector_tool.query_devices(
                     query=user_request.get("user_base_prompt", str(user_request)),
@@ -89,35 +92,23 @@ class PhoneAgent(BaseAgent):
                     price_max=budget,
                     top_k=5
                 )
-                
-                # If we have good results (3+ devices), use them
                 if vector_results and len(vector_results) >= 3:
                     formatted_results = json.dumps(vector_results, indent=2)
                     source = "Vector Database"
-            
-            # Step 3: If Vector DB insufficient, use Serper
+
+            # Step 3: Fallback to Serper
             if not formatted_results:
-                search_decision_prompt = f"""
+                search_prompt = f"""
                 Create a search query for finding phones based on:
                 {user_request_str}
-                
-                Return ONLY valid JSON:
-                {{"search_query": "your query here"}}
+                Return ONLY JSON: {{"search_query": "query"}}
                 """
-                
-                decision_raw_llm_response = self.contact(search_decision_prompt)
-                decision_raw_cleaned = self._extract_json_from_markdown(decision_raw_llm_response)
-                
+                decision_raw = self.contact(search_prompt)
+                decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
                 try:
-                    decision = json.loads(decision_raw_cleaned)
+                    decision = json.loads(decision_cleaned)
                     search_query = decision.get("search_query", "")
-                except json.JSONDecodeError:
-                    print(f"WARNING: PhoneAgent - Failed to parse search_decision JSON (from LLM): {decision_raw_llm_response[:200]}... Cleaned: {decision_raw_cleaned[:200]}...")
-                    # Fallback: construct query from request
-                    specs = f"{user_request.get('ram', '')} {user_request.get('storage', '')} smartphone"
-                    search_query = f"{specs} {location} under {budget}"
-                except Exception as e:
-                    print(f"ERROR: PhoneAgent - Error during search query decision: {e}. Raw LLM: {decision_raw_llm_response[:200]}...")
+                except Exception:
                     specs = f"{user_request.get('ram', '')} {user_request.get('storage', '')} smartphone"
                     search_query = f"{specs} {location} under {budget}"
 
@@ -126,86 +117,59 @@ class PhoneAgent(BaseAgent):
                     search_results = search_tool.get_organic_results(search_query, num_results=5)
                     formatted_results = search_tool.format_results(search_results)
                     source = "Web Search"
-            
-            # Step 4: Generate final recommendation
-            full_prompt = f"""
+
+            # Step 4: Final recommendation
+            final_prompt = f"""
             {self.phone_prompt}
-            
+
             User request:
             {user_request_str}
-            
+
             Data source: {source}
-            
-            Retrieved information:
-            {formatted_results}
-            
+            Retrieved information: {formatted_results}
             Current timestamp: {datetime.utcnow().isoformat()}Z
-            
-            Now synthesize the final JSON recommendation output following the exact format specified in the prompt.
-            Return ONLY valid JSON, no markdown or extra text.
+
+            Return ONLY valid JSON.
             """
-            
-            final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
-            
-            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
-            try:
-                return json.loads(final_response_cleaned) 
-            except json.JSONDecodeError:
-                print(f"CRITICAL ERROR: PhoneAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
-                # If the LLM consistently fails to return valid JSON, you might need to refine your prompt
-                # or add more robust parsing/correction logic. For now, raise an error.
-                raise ValueError("Final AI response was not valid JSON.")
-            
+            llm_output = self.contact(final_prompt)
+            cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
+            return json.loads(cleaned)
+
         except Exception as e:
-            # If any other error occurs during the handling, return a dictionary describing the error.
-            # FastAPI will then correctly serialize this dictionary to JSON.
-            return {
-                "error": str(e),
-                "status": "failed",
-                "user_request": user_request
-            }
+            return {"error": str(e), "status": "failed", "user_request": user_request}
 
 
+# ============================================================
+# LAPTOP AGENT
+# ============================================================
 class LaptopAgent(BaseAgent):
-    """Laptop finder agent with vector DB and web search."""
-    
+    """Laptop finder with DB-first and Serper fallback."""
+
     def __init__(self, llm, prompt_template):
         super().__init__(llm)
         self.laptop_prompt = prompt_template
-    
-    # Changed return type hint to Dict[str, Any]
-    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
-        """Full reasoning pipeline with Vector DB first, then web search fallback."""
+
+    def handle_request(self, user_request):
         try:
             user_request_str = json.dumps(user_request, indent=2)
-            
-            # Extract parameters
             extraction_prompt = f"""
-            Extract location and budget from: {user_request_str}
+            Extract location and budget from this request:
+            {user_request_str}
             Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
-            params_raw_llm_response = self.contact(extraction_prompt)
-            params_raw_cleaned = self._extract_json_from_markdown(params_raw_llm_response)
-            
+            params_raw = self.contact(extraction_prompt)
+            params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
+
             try:
-                params = json.loads(params_raw_cleaned)
+                params = json.loads(params_cleaned)
                 location = params.get("location", user_request.get("location", ""))
                 budget = params.get("budget", user_request.get("budget"))
-            except json.JSONDecodeError:
-                print(f"WARNING: LaptopAgent - Failed to parse params_raw JSON (from LLM): {params_raw_llm_response[:200]}... Cleaned: {params_raw_cleaned[:200]}...")
+            except Exception:
                 location = user_request.get("location", "")
                 budget = user_request.get("budget")
-            except Exception as e:
-                print(f"ERROR: LaptopAgent - Error during parameter extraction: {e}. Raw LLM: {params_raw_llm_response[:200]}...")
-                location = user_request.get("location", "")
-                budget = user_request.get("budget")
-            
-            # Try Vector DB first
-            formatted_results = None
-            source = None
+
+            formatted_results, source = None, None
             vector_tool = self.tools.get("vector_db")
-            
             if vector_tool and location:
                 vector_results = vector_tool.query_devices(
                     query=user_request.get("user_base_prompt", str(user_request)),
@@ -214,349 +178,343 @@ class LaptopAgent(BaseAgent):
                     price_max=budget,
                     top_k=5
                 )
-                
                 if vector_results and len(vector_results) >= 3:
                     formatted_results = json.dumps(vector_results, indent=2)
                     source = "Vector Database"
-            
-            # Fallback to Serper
+
             if not formatted_results:
-                search_decision_prompt = f"""
-                Create a search query for finding laptops based on: {user_request_str}
-                Return ONLY JSON: {{"search_query": "your query"}}
+                search_prompt = f"""
+                Create a search query for finding laptops based on:
+                {user_request_str}
+                Return ONLY JSON: {{"search_query": "query"}}
                 """
-                decision_raw_llm_response = self.contact(search_decision_prompt)
-                decision_raw_cleaned = self._extract_json_from_markdown(decision_raw_llm_response)
-                
+                decision_raw = self.contact(search_prompt)
+                decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
                 try:
-                    decision = json.loads(decision_raw_cleaned)
+                    decision = json.loads(decision_cleaned)
                     search_query = decision.get("search_query", "")
-                except json.JSONDecodeError:
-                    print(f"WARNING: LaptopAgent - Failed to parse search_decision JSON (from LLM): {decision_raw_llm_response[:200]}... Cleaned: {decision_raw_cleaned[:200]}...")
+                except Exception:
                     usage = user_request.get("usage", "general")
                     search_query = f"{usage} laptop {location} under {budget}"
-                except Exception as e:
-                    print(f"ERROR: LaptopAgent - Error during search query decision: {e}. Raw LLM: {decision_raw_llm_response[:200]}...")
-                    usage = user_request.get("usage", "general")
-                    search_query = f"{usage} laptop {location} under {budget}"
-                
+
                 search_tool = self.tools.get("serper")
                 if search_tool:
                     search_results = search_tool.get_organic_results(search_query, num_results=5)
                     formatted_results = search_tool.format_results(search_results)
                     source = "Web Search"
-            
-            # Generate recommendation
-            full_prompt = f"""
+
+            final_prompt = f"""
             {self.laptop_prompt}
-            
             User request: {user_request_str}
             Data source: {source}
-            Retrieved information: {formatted_results}
-            Current timestamp: {datetime.utcnow().isoformat()}Z
-            
-            Return ONLY valid JSON following the specified format.
+            Retrieved: {formatted_results}
+            Timestamp: {datetime.utcnow().isoformat()}Z
+            Return ONLY JSON.
             """
-            
-            final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
-            
-            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
-            try:
-                return json.loads(final_response_cleaned) 
-            except json.JSONDecodeError:
-                print(f"CRITICAL ERROR: LaptopAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
-                raise ValueError("Final AI response for Laptop was not valid JSON.")
-            
+            llm_output = self.contact(final_prompt)
+            cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
+            return json.loads(cleaned)
+
         except Exception as e:
-            return {
-                "error": str(e),
-                "status": "failed",
-                "user_request": user_request
-            }
+            return {"error": str(e), "status": "failed", "user_request": user_request}
 
 
+# ============================================================
+# TABLET AGENT
+# ============================================================
 class TabletAgent(BaseAgent):
-    """Tablet finder agent."""
-    
+    """Tablet search and recommendation agent."""
+
     def __init__(self, llm, prompt_template):
         super().__init__(llm)
         self.tablet_prompt = prompt_template
-    
-    # Changed return type hint to Dict[str, Any]
-    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
+
+    def handle_request(self, user_request):
         try:
             user_request_str = json.dumps(user_request, indent=2)
-            
-            # Tablet Agent extracts params without LLM, so no cleaning here for that specific step
-            location = user_request.get("location", "")
-            budget = user_request.get("budget")
-            
-            # Try Vector DB
-            formatted_results = None
-            source = None
+            extraction_prompt = f"""
+            Extract location and budget from: {user_request_str}
+            Return ONLY JSON: {{"location": "City, Country", "budget": number}}
+            """
+            params_raw = self.contact(extraction_prompt)
+            params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
+            try:
+                params = json.loads(params_cleaned)
+                location = params.get("location", user_request.get("location", ""))
+                budget = params.get("budget", user_request.get("budget"))
+            except Exception:
+                location = user_request.get("location", "")
+                budget = user_request.get("budget")
+
+            formatted_results, source = None, None
             vector_tool = self.tools.get("vector_db")
-            
+
             if vector_tool and location:
                 vector_results = vector_tool.query_devices(
-                    query=user_request.get("user_base_prompt", str(user_request)),
+                    query=str(user_request),
                     category="tablet",
                     location=location,
                     price_max=budget,
                     top_k=5
                 )
-                
                 if vector_results and len(vector_results) >= 3:
                     formatted_results = json.dumps(vector_results, indent=2)
                     source = "Vector Database"
-            
-            # Fallback to Serper (no LLM for search query building here)
+
             if not formatted_results:
-                search_query = f"tablet {user_request.get('display', '')} {location} under {budget}"
+                search_prompt = f"""
+                Create a search query for tablets:
+                {user_request_str}
+                Return ONLY JSON: {{"search_query": "query"}}
+                """
+                decision_raw = self.contact(search_prompt)
+                decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
+                try:
+                    decision = json.loads(decision_cleaned)
+                    search_query = decision.get("search_query", "")
+                except Exception:
+                    search_query = f"tablet {location} under {budget}"
+
                 search_tool = self.tools.get("serper")
                 if search_tool:
                     search_results = search_tool.get_organic_results(search_query, num_results=5)
                     formatted_results = search_tool.format_results(search_results)
                     source = "Web Search"
-            
-            full_prompt = f"""
+
+            final_prompt = f"""
             {self.tablet_prompt}
-            
             User request: {user_request_str}
             Data source: {source}
-            Retrieved information: {formatted_results}
-            Current timestamp: {datetime.utcnow().isoformat()}Z
-            
-            Return ONLY valid JSON.
+            Data: {formatted_results}
+            Timestamp: {datetime.utcnow().isoformat()}Z
+            Return ONLY JSON.
             """
-            
-            final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
-            
-            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
-            try:
-                return json.loads(final_response_cleaned) 
-            except json.JSONDecodeError:
-                print(f"CRITICAL ERROR: TabletAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
-                raise ValueError("Final AI response for Tablet was not valid JSON.")
-            
+            llm_output = self.contact(final_prompt)
+            cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
+            return json.loads(cleaned)
         except Exception as e:
-            return {"error": str(e), "status": "failed", "user_request": user_request}
+            return {"error": str(e), "status": "failed"}
 
 
+# ============================================================
+# EARPIECE AGENT
+# ============================================================
 class EarpieceAgent(BaseAgent):
-    """Earpiece/headphone finder agent."""
-    
+    """Earpiece recommendation agent."""
+
     def __init__(self, llm, prompt_template):
         super().__init__(llm)
         self.earpiece_prompt = prompt_template
-    
-    # Changed return type hint to Dict[str, Any]
-    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
+
+    def handle_request(self, user_request):
         try:
             user_request_str = json.dumps(user_request, indent=2)
-            
-            # Earpiece Agent extracts params without LLM, so no cleaning here for that specific step
-            location = user_request.get("location", "")
-            budget = user_request.get("budget")
-            
-            # Try Vector DB
-            formatted_results = None
-            source = None
+            extraction_prompt = f"""
+            Extract location and budget from: {user_request_str}
+            Return ONLY JSON: {{"location": "City, Country", "budget": number}}
+            """
+            params_raw = self.contact(extraction_prompt)
+            params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
+            try:
+                params = json.loads(params_cleaned)
+                location = params.get("location", user_request.get("location", ""))
+                budget = params.get("budget", user_request.get("budget"))
+            except Exception:
+                location = user_request.get("location", "")
+                budget = user_request.get("budget")
+
+            formatted_results, source = None, None
             vector_tool = self.tools.get("vector_db")
-            
+
             if vector_tool and location:
                 vector_results = vector_tool.query_devices(
-                    query=user_request.get("user_base_prompt", str(user_request)),
+                    query=str(user_request),
                     category="earpiece",
                     location=location,
                     price_max=budget,
                     top_k=5
                 )
-                
                 if vector_results and len(vector_results) >= 3:
                     formatted_results = json.dumps(vector_results, indent=2)
                     source = "Vector Database"
-            
-            # Fallback to Serper (no LLM for search query building here)
+
             if not formatted_results:
-                earpiece_type = user_request.get("earpiece_type", "earbuds")
-                search_query = f"{earpiece_type} {location} under {budget}"
+                search_prompt = f"""
+                Create search query for earpieces:
+                {user_request_str}
+                Return ONLY JSON: {{"search_query": "query"}}
+                """
+                decision_raw = self.contact(search_prompt)
+                decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
+                try:
+                    decision = json.loads(decision_cleaned)
+                    search_query = decision.get("search_query", "")
+                except Exception:
+                    search_query = f"earpiece {location} under {budget}"
+
                 search_tool = self.tools.get("serper")
                 if search_tool:
                     search_results = search_tool.get_organic_results(search_query, num_results=5)
                     formatted_results = search_tool.format_results(search_results)
                     source = "Web Search"
-            
-            full_prompt = f"""
+
+            final_prompt = f"""
             {self.earpiece_prompt}
-            
             User request: {user_request_str}
-            Data source: {source}
-            Retrieved information: {formatted_results}
-            Current timestamp: {datetime.utcnow().isoformat()}Z
-            
-            Return ONLY valid JSON.
+            Source: {source}
+            Data: {formatted_results}
+            Timestamp: {datetime.utcnow().isoformat()}Z
+            Return ONLY JSON.
             """
-            
-            final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
-            
-            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
-            try:
-                return json.loads(final_response_cleaned) 
-            except json.JSONDecodeError:
-                print(f"CRITICAL ERROR: EarpieceAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
-                raise ValueError("Final AI response for Earpiece was not valid JSON.")
-            
+            llm_output = self.contact(final_prompt)
+            cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
+            return json.loads(cleaned)
         except Exception as e:
-            return {"error": str(e), "status": "failed", "user_request": user_request}
+            return {"error": str(e), "status": "failed"}
 
 
+# ============================================================
+# PREBUILT PC AGENT
+# ============================================================
 class PreBuiltPCAgent(BaseAgent):
-    """Pre-built PC finder agent."""
-    
+    """Handles prebuilt PC searches."""
+
     def __init__(self, llm, prompt_template):
         super().__init__(llm)
         self.pc_prompt = prompt_template
-    
-    # Changed return type hint to Dict[str, Any]
-    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
+
+    def handle_request(self, user_request):
         try:
             user_request_str = json.dumps(user_request, indent=2)
-            
-            # PreBuiltPCAgent extracts params without LLM, so no cleaning here for that specific step
-            location = user_request.get("location", "")
-            budget = user_request.get("budget")
-            
-            # Try Vector DB
-            formatted_results = None
-            source = None
+            extraction_prompt = f"""
+            Extract location and budget:
+            {user_request_str}
+            Return ONLY JSON: {{"location": "City, Country", "budget": number}}
+            """
+            params_raw = self.contact(extraction_prompt)
+            params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
+            try:
+                params = json.loads(params_cleaned)
+                location = params.get("location", user_request.get("location", ""))
+                budget = params.get("budget", user_request.get("budget"))
+            except Exception:
+                location = user_request.get("location", "")
+                budget = user_request.get("budget")
+
+            formatted_results, source = None, None
             vector_tool = self.tools.get("vector_db")
-            
+
             if vector_tool and location:
                 vector_results = vector_tool.query_devices(
-                    query=user_request.get("user_base_prompt", str(user_request)),
+                    query=str(user_request),
                     category="prebuilt_pc",
                     location=location,
                     price_max=budget,
                     top_k=5
                 )
-                
                 if vector_results and len(vector_results) >= 3:
                     formatted_results = json.dumps(vector_results, indent=2)
                     source = "Vector Database"
-            
-            # Fallback to Serper (no LLM for search query building here)
+
             if not formatted_results:
-                usage = user_request.get("usage", "general")
-                search_query = f"prebuilt {usage} PC {location} under {budget}"
+                search_prompt = f"""
+                Create search query for prebuilt PCs:
+                {user_request_str}
+                Return ONLY JSON: {{"search_query": "query"}}
+                """
+                decision_raw = self.contact(search_prompt)
+                decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
+                try:
+                    decision = json.loads(decision_cleaned)
+                    search_query = decision.get("search_query", "")
+                except Exception:
+                    search_query = f"prebuilt gaming PC {location} under {budget}"
+
                 search_tool = self.tools.get("serper")
                 if search_tool:
                     search_results = search_tool.get_organic_results(search_query, num_results=5)
                     formatted_results = search_tool.format_results(search_results)
                     source = "Web Search"
-            
-            full_prompt = f"""
+
+            final_prompt = f"""
             {self.pc_prompt}
-            
             User request: {user_request_str}
-            Data source: {source}
-            Retrieved information: {formatted_results}
-            Current timestamp: {datetime.utcnow().isoformat()}Z
-            
-            Return ONLY valid JSON.
+            Source: {source}
+            Data: {formatted_results}
+            Timestamp: {datetime.utcnow().isoformat()}Z
+            Return ONLY JSON.
             """
-            
-            final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
-            
-            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
-            try:
-                return json.loads(final_response_cleaned) 
-            except json.JSONDecodeError:
-                print(f"CRITICAL ERROR: PreBuiltPCAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
-                raise ValueError("Final AI response for Pre-built PC was not valid JSON.")
-            
+            llm_output = self.contact(final_prompt)
+            cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
+            return json.loads(cleaned)
         except Exception as e:
-            return {
-                "error": str(e),
-                "status": "failed",
-                "user_request": user_request
-            }
+            return {"error": str(e), "status": "failed"}
 
 
+# ============================================================
+# PC BUILDER AGENT
+# ============================================================
 class PCBuilderAgent(BaseAgent):
-    """PC builder agent for custom builds."""
-    
+    """Handles custom PC build configurations."""
+
     def __init__(self, llm, prompt_template):
         super().__init__(llm)
         self.builder_prompt = prompt_template
-    
-    # Changed return type hint to Dict[str, Any]
-    def handle_request(self, user_request: Dict[str, Any]) -> Dict[str, Any]:
+
+    def handle_request(self, user_request):
         try:
             user_request_str = json.dumps(user_request, indent=2)
-            # PCBuilderAgent extracts params without LLM, so no cleaning here for that specific step
-            location = user_request.get("location", "")
-            budget = user_request.get("budget")
-            use_case = user_request.get("use_case", "general")
-            
-            # PC Builder always uses web search for component availability
-            # No vector DB fallback for components (too many variations)
-            
-            search_queries = []
-            components = ["CPU", "GPU", "motherboard", "RAM", "SSD", "PSU", "case"]
-            
-            # Build search queries for each component
-            for component in components:
-                query = f"{component} {use_case} {location} under {budget // len(components)}"
-                search_queries.append({"component": component, "query": query})
-            
-            # Search for components
-            search_tool = self.tools.get("serper")
-            all_results = []
-            
-            if search_tool:
-                for item in search_queries[:3]:  # Limit to top 3 components to save API calls
-                    results = search_tool.get_organic_results(item["query"], num_results=3)
-                    all_results.append({
-                        "component": item["component"],
-                        "results": results
-                    })
-            
-            formatted_results = json.dumps(all_results, indent=2)
-            
-            full_prompt = f"""
-            {self.builder_prompt}
-            
-            User request: {user_request_str}
-            
-            Component search results:
-            {formatted_results}
-            
-            Current timestamp: {datetime.utcnow().isoformat()}Z
-            
-            Analyze the components, ensure compatibility, and return ONLY valid JSON following the specified format.
+            extraction_prompt = f"""
+            Extract location and budget from:
+            {user_request_str}
+            Return ONLY JSON: {{"location": "City, Country", "budget": number}}
             """
-            
-            final_response_llm_output = self.contact(full_prompt)
-            final_response_cleaned = self._extract_json_from_markdown(final_response_llm_output)
-            
-            # CRITICAL CHANGE: Parse the final JSON string into a Python dictionary HERE
+            params_raw = self.contact(extraction_prompt)
+            params_cleaned = self._clean_json_text(self._extract_json_from_markdown(params_raw))
             try:
-                return json.loads(final_response_cleaned) 
-            except json.JSONDecodeError:
-                print(f"CRITICAL ERROR: PCBuilderAgent - Final LLM output was NOT valid JSON after cleaning: {final_response_cleaned[:500]}...")
-                raise ValueError("Final AI response for PC Builder was not valid JSON.")
-            
-        except Exception as e:
-            return {
-                "error": str(e),
-                "status": "failed",
-                "user_request": user_request
-            }
+                params = json.loads(params_cleaned)
+                location = params.get("location", user_request.get("location", ""))
+                budget = params.get("budget", user_request.get("budget"))
+            except Exception:
+                location = user_request.get("location", "")
+                budget = user_request.get("budget")
 
+            formatted_results, source = None, None
+            search_prompt = f"""
+            Create search queries for all PC parts needed based on:
+            {user_request_str}
+            Return ONLY JSON: {{"search_queries": ["CPU query", "GPU query", "RAM query", ...]}}
+            """
+            decision_raw = self.contact(search_prompt)
+            decision_cleaned = self._clean_json_text(self._extract_json_from_markdown(decision_raw))
+            try:
+                decision = json.loads(decision_cleaned)
+                queries = decision.get("search_queries", [])
+            except Exception:
+                queries = [f"gaming pc parts {location} under {budget}"]
+
+            search_tool = self.tools.get("serper")
+            if search_tool:
+                part_results = []
+                for q in queries:
+                    res = search_tool.get_organic_results(q, num_results=3)
+                    part_results.append({q: res})
+                formatted_results = json.dumps(part_results, indent=2)
+                source = "Web Search"
+
+            final_prompt = f"""
+            {self.builder_prompt}
+            User request: {user_request_str}
+            Source: {source}
+            Data: {formatted_results}
+            Timestamp: {datetime.utcnow().isoformat()}Z
+            Return ONLY JSON.
+            """
+            llm_output = self.contact(final_prompt)
+            cleaned = self._clean_json_text(self._extract_json_from_markdown(llm_output))
+            return json.loads(cleaned)
+        except Exception as e:
+            return {"error": str(e), "status": "failed"}
 
 # Factory functions for easy agent creation
 def create_phone_agent(llm, vector_db, serper_tool):

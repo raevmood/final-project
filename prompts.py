@@ -71,8 +71,8 @@ Return a strictly valid JSON object like this:
       "url": "https://www.jumia.co.ke/samsung-a35-5g-128gb-8gb-black/",
       "reasoning": "Fits budget and preferred specs. Best display and camera at this price range.",
       "confidence": "high",
-      "physical_store": Mary and Beth Tech, 1011, Tom Mboya Street, Nairobi
-      "store_phone_number": 0765743998
+      "physical_store": "Mary and Beth Tech, 1011, Tom Mboya Street, Nairobi"
+      "store_phone_number": 0765743998,
       "store_email": marybarin@gmail.com
     }
   ],
@@ -82,7 +82,7 @@ Return a strictly valid JSON object like this:
     "budget_range": "KES 25,000–45,000"
   }
 }
-
+Escape any newlines and quotes in string values to ensure valid JSON.
 ADDITIONAL RULES
 - Always recommend *currently available* phones for the specified location when data allows.
 - If no phones meet all criteria, suggest close alternatives and explain trade-offs.
@@ -177,8 +177,8 @@ Return a strictly valid JSON object structured as follows:
       "url": "https://www.phoneplacekenya.com/product/asus-tuf-gaming-a15/",
       "reasoning": "Best gaming performance under budget with strong thermals and modern CPU.",
       "confidence": "high",
-      "physical_store": "PhonePlace Kenya, Kimathi Street, Nairobi"
-      "store_phone_number": 0765743934
+      "physical_store": "PhonePlace Kenya, Kimathi Street, Nairobi",
+      "store_phone_number": "0765743934",
       "store_email": laptopers1011@gmail.com
     }
   ],
@@ -188,7 +188,7 @@ Return a strictly valid JSON object structured as follows:
     "budget_range": "KES 100,000–140,000"
   }
 }
-
+Escape any newlines and quotes in string values to ensure valid JSON.
 ADDITIONAL RULES
 
 - Always recommend currently available laptops in the specified region when possible.
@@ -296,7 +296,7 @@ Return a strictly valid JSON object structured as follows:
     "budget_range": "KES 70,000–90,000"
   }
 }
-
+Escape any newlines and quotes in string values to ensure valid JSON.
 ADDITIONAL RULES
 
 - Always recommend currently available tablets in the specified region when possible.
@@ -389,7 +389,7 @@ Return a strictly valid JSON object like this:
     "budget_range": "KES 60,000–80,000"
   }
 }
-
+Escape any newlines and quotes in string values to ensure valid JSON.
 ADDITIONAL RULES
 - Always recommend *currently available* earpieces for the specified location when data allows.
 - If no products meet all criteria, suggest close alternatives and explain trade-offs.
@@ -518,7 +518,7 @@ Return a strictly valid JSON object like this:
     "total_vendors_consulted": 3
   }
 }
-
+Escape any newlines and quotes in string values to ensure valid JSON.
 ADDITIONAL RULES
 
 - Ensure full component compatibility (socket, PSU, case fit, RAM type, BIOS version if relevant).
@@ -619,4 +619,5 @@ Return only valid JSON following this exact structure:
     "budget_range": "KES 230,000–240,000"
   }
 }
+Escape any newlines and quotes in string values to ensure valid JSON.
 """
