@@ -61,9 +61,10 @@ class BaseAgent:
 
         # Escape unescaped quotes (e.g. 27" Monitor → 27\" Monitor)
 # Fix stray quotes at the end of URLs or words (e.g. 200000" → 200000")
-        text = re.sub(r'(?<=https?:\/\/[^\s"]+)"', '', text)
-        text = re.sub(r'(?<=\d)"(?=[^:,\}\]])', '\\"', text)
+        text = re.sub(r'(https?:\/\/[^\s"]+)"', r'\1', text)
 
+# Escape unescaped quotes in model names like 27" Monitor → 27\" Monitor
+        text = re.sub(r'(\d)"(?=[^:,\}\]])', r'\1\\"', text)
 
         # Remove control characters
         text = re.sub(r'[\x00-\x1F]+', '', text)
