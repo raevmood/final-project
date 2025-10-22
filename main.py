@@ -34,6 +34,9 @@ from utils.data_ingestor import run_daily_ingestion # The refactored ingestion f
 from chatbot import DeviceFinderChatbot
 from utils.memory import DeviceFinderMemory
 
+# Import RAG client (NEW)
+from tools.rag_client import RAGClient
+
 app = FastAPI(
     title="DeviceFinder.AI API",
     description="AI-powered multi-agent system for finding and recommending electronic devices with JWT authentication.",
@@ -61,6 +64,7 @@ app.include_router(auth_routes.router)
 llm_instance: Optional[LLMProvider] = None
 vector_db_instance: Optional[VectorDBTool] = None
 serper_instance: Optional[SerperSearchTool] = None
+rag_client_instance: Optional[RAGClient] = None  # NEW: RAG client for chatbot
 
 phone_agent = None
 laptop_agent = None
@@ -71,7 +75,7 @@ pc_builder_agent = None
 
 @app.on_event("startup")
 async def startup_event():
-    global llm_instance, vector_db_instance, serper_instance
+    global llm_instance, vector_db_instance, serper_instance, rag_client_instance
     global phone_agent, laptop_agent, tablet_agent, earpiece_agent, prebuilt_pc_agent, pc_builder_agent
 
     print("=" * 60)
@@ -88,6 +92,17 @@ async def startup_event():
         llm_instance = LLMProvider()
         vector_db_instance = VectorDBTool()
         serper_instance = SerperSearchTool()
+
+        # Initialize RAG client (NEW)
+        # Get MCP server URL from environment variable, default to localhost
+        mcp_server_url = os.getenv("MCP_SERVER_URL", "http://localhost:8001")
+        try:
+            rag_client_instance = RAGClient(base_url=mcp_server_url)
+            print(f"✓ RAG client initialized for chatbot context retrieval")
+        except Exception as rag_error:
+            print(f"⚠️  Warning: RAG client initialization failed: {rag_error}")
+            print("   Chatbot will operate without RAG context enhancement")
+            rag_client_instance = None
 
         # Initialize agents
         phone_agent = create_phone_agent(llm_instance, vector_db_instance, serper_instance)
@@ -124,7 +139,8 @@ async def root():
         "docs": "/docs",
         "register": "/auth/register",
         "login": "/auth/login",
-        "total_users": UserStore.get_user_count()
+        "total_users": UserStore.get_user_count(),
+        "rag_enabled": rag_client_instance is not None  # NEW: Show RAG status
     }
 
 # --- Ingestion Endpoint ---
@@ -367,7 +383,7 @@ async def build_custom_pc(
         raise HTTPException(status_code=500, detail=f"Error in PC Builder Agent: {str(e)}")
 
 
-# --- Chatbot Endpoint (NEW) ---
+# --- Chatbot Endpoint (UPDATED with RAG) ---
 class ChatMessage(BaseModel):
     message: str
 
@@ -381,6 +397,7 @@ async def chat_with_devicefinder(
     
     This endpoint takes a user message, processes it through the chatbot,
     and returns a guided response. Memory is maintained per authenticated user.
+    RAG context is automatically retrieved when available.
     """
     if not llm_instance:
         raise HTTPException(status_code=503, detail="LLM Provider not initialized.")
@@ -391,11 +408,15 @@ async def chat_with_devicefinder(
     print(f"Chatbot - User {username} ({user_id}) sent message: {chat_message.message[:100]}...")
 
     try:
-        # Create a new chatbot instance per request.
+        # Create a new chatbot instance per request with RAG client if available.
         # It will automatically load memory based on user_id.
-        chatbot = DeviceFinderChatbot(user_id=user_id, llm_provider=llm_instance)
+        chatbot = DeviceFinderChatbot(
+            user_id=user_id, 
+            llm_provider=llm_instance,
+            rag_client=rag_client_instance  # NEW: Pass RAG client
+        )
         
-        # Get response from the chatbot
+        # Get response from the chatbot (with RAG context if available)
         ai_response = chatbot.get_response(chat_message.message)
         
         return {"response": ai_response}
