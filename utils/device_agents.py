@@ -6,7 +6,7 @@ Simple, transparent agents with tool access and JSON-safe parsing.
 import json
 import re
 from datetime import datetime
-from llm_provider import RateLimitExceeded
+from utils.llm_provider import RateLimitExceeded
 from typing import Dict, Any
 
 
@@ -798,7 +798,7 @@ class PCBuilderAgent(BaseAgent):
 
 def create_phone_agent(llm, vector_db, serper_tool):
     """Create and configure a phone agent."""
-    from prompts import phone_prompt
+    from utils.prompts import phone_prompt
     agent = PhoneAgent(llm, phone_prompt)
     agent.register_tool("vector_db", vector_db)
     agent.register_tool("serper", serper_tool)
@@ -807,7 +807,7 @@ def create_phone_agent(llm, vector_db, serper_tool):
 
 def create_laptop_agent(llm, vector_db, serper_tool):
     """Create and configure a laptop agent."""
-    from prompts import laptop_prompt
+    from utils.prompts import laptop_prompt
     agent = LaptopAgent(llm, laptop_prompt)
     agent.register_tool("vector_db", vector_db)
     agent.register_tool("serper", serper_tool)
@@ -816,7 +816,7 @@ def create_laptop_agent(llm, vector_db, serper_tool):
 
 def create_tablet_agent(llm, vector_db, serper_tool):
     """Create and configure a tablet agent."""
-    from prompts import tablet_prompt
+    from utils.prompts import tablet_prompt
     agent = TabletAgent(llm, tablet_prompt)
     agent.register_tool("vector_db", vector_db)
     agent.register_tool("serper", serper_tool)
@@ -825,7 +825,7 @@ def create_tablet_agent(llm, vector_db, serper_tool):
 
 def create_earpiece_agent(llm, vector_db, serper_tool):
     """Create and configure an earpiece agent."""
-    from prompts import earpiece_prompt
+    from utils.prompts import earpiece_prompt
     agent = EarpieceAgent(llm, earpiece_prompt)
     agent.register_tool("vector_db", vector_db)
     agent.register_tool("serper", serper_tool)
@@ -834,7 +834,7 @@ def create_earpiece_agent(llm, vector_db, serper_tool):
 
 def create_prebuilt_pc_agent(llm, vector_db, serper_tool):
     """Create and configure a pre-built PC agent."""
-    from prompts import prebuilt_pc_prompt
+    from utils.prompts import prebuilt_pc_prompt
     agent = PreBuiltPCAgent(llm, prebuilt_pc_prompt)
     agent.register_tool("vector_db", vector_db)
     agent.register_tool("serper", serper_tool)
@@ -843,16 +843,16 @@ def create_prebuilt_pc_agent(llm, vector_db, serper_tool):
 
 def create_pc_builder_agent(llm, serper_tool):
     """Create and configure a PC builder agent (no vector DB needed)."""
-    from prompts import pc_builder_prompt
+    from utils.prompts import pc_builder_prompt
     agent = PCBuilderAgent(llm, pc_builder_prompt)
     agent.register_tool("serper", serper_tool)
     return agent
 
 
 if __name__ == "__main__":
-    from llm_provider import LLMProvider
-    from vector_db_tool import VectorDBTool
-    from serper_tool import SerperSearchTool
+    from utils.llm_provider import LLMProvider
+    from tools.vector_db_tool import VectorDBTool
+    from tools.serper_tool import SerperSearchTool
     llm = LLMProvider()
     vector_db = VectorDBTool()
     serper = SerperSearchTool()

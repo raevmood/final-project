@@ -4,9 +4,9 @@ Authentication routes: register, login, user info
 from datetime import timedelta
 from fastapi import APIRouter, HTTPException, status, Depends
 
-from user_store import UserStore
-from schemas import UserRegister, UserLogin, Token, UserResponse
-from auth_utils import (
+from auth.user_store import UserStore
+from auth.schemas import UserRegister, UserLogin, Token, UserResponse
+from auth.auth_utils import (
     create_access_token,
     get_current_user,
     ACCESS_TOKEN_EXPIRE_HOURS

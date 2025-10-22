@@ -9,8 +9,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 
-from user_store import UserStore
-from schemas import TokenData
+from auth.user_store import UserStore
+from auth.schemas import TokenData
 
 load_dotenv()
 

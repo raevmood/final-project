@@ -4,10 +4,10 @@ import re # For basic price extraction, replace with LLM as discussed
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
-from vector_db_tool import VectorDBTool
-from serper_tool import SerperSearchTool
-from llm_provider import LLMProvider # Import your LLM provider
-from config import PRESET_SEARCH_QUERIES
+from tools.vector_db_tool import VectorDBTool
+from tools.serper_tool import SerperSearchTool
+from utils.llm_provider import LLMProvider # Import your LLM provider
+from utils.config import PRESET_SEARCH_QUERIES
 import time
 
 # --- Helper function for LLM-based parsing (CRITICAL for robust ingestion) ---

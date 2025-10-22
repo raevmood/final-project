@@ -12,15 +12,15 @@ from dotenv import load_dotenv
 load_dotenv() # Load environment variables early
 
 # Import authentication components (NEW)
-import auth_routes
-from auth_utils import get_current_user
-from user_store import UserStore
+import auth.auth_routes as auth_routes
+from auth.auth_utils import get_current_user
+from auth.user_store import UserStore
 
 # Import your core components
-from llm_provider import LLMProvider, RateLimitExceeded # Added RateLimitExceeded
-from vector_db_tool import VectorDBTool
-from serper_tool import SerperSearchTool
-from device_agents import (
+from utils.llm_provider import LLMProvider, RateLimitExceeded # Added RateLimitExceeded
+from tools.vector_db_tool import VectorDBTool
+from tools.serper_tool import SerperSearchTool
+from utils.device_agents import (
     create_phone_agent,
     create_laptop_agent,
     create_tablet_agent,
@@ -28,11 +28,11 @@ from device_agents import (
     create_prebuilt_pc_agent,
     create_pc_builder_agent
 )
-from data_ingestor import run_daily_ingestion # The refactored ingestion function
+from utils.data_ingestor import run_daily_ingestion # The refactored ingestion function
 
 # Import chatbot components (NEW)
 from chatbot import DeviceFinderChatbot
-from memory import DeviceFinderMemory
+from utils.memory import DeviceFinderMemory
 
 app = FastAPI(
     title="DeviceFinder.AI API",
@@ -79,7 +79,7 @@ async def startup_event():
     print("=" * 60)
     
     # Initialize test user for development (NEW)
-    from user_store import initialize_test_users
+    from auth.user_store import initialize_test_users
     initialize_test_users()
     print(f"✓ Total registered users: {UserStore.get_user_count()}")
 

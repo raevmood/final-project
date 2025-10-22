@@ -2,9 +2,9 @@
 from typing import List, Optional
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
-from prompts import chatbot_prompt
-from memory import DeviceFinderMemory
-from llm_provider import LLMProvider 
+from utils.prompts import chatbot_prompt
+from utils.memory import DeviceFinderMemory
+from utils.llm_provider import LLMProvider 
 
 class DeviceFinderChatbot:
     def __init__(self, user_id: int, llm_provider: LLMProvider):
