@@ -365,31 +365,7 @@ A test user is automatically created on startup:
 - Add cookie-based session persistence
 - Use persistent storage for chat history (database or S3)
 
----
 
-## 📁 Project Structure
-
-```
-final-project/
-├── main.py                 # FastAPI application entry point
-├── auth_routes.py          # Authentication endpoints
-├── auth_utils.py           # JWT token utilities
-├── user_store.py           # In-memory user management
-├── llm_provider.py         # LLM integration with rate limiting
-├── vector_db_tool.py       # ChromaDB vector search
-├── serper_tool.py          # Web search integration
-├── device_agents.py        # Specialized agent implementations
-├── chatbot.py              # Conversational AI assistant
-├── memory.py               # Chat memory management (JSON files)
-├── data_ingestor.py        # Vector DB ingestion logic
-├── requirements.txt        # Python dependencies
-├── Dockerfile              # Docker configuration
-├── .env                    # Environment variables (not in repo)
-├── chroma_db/              # Vector database storage (created on first run)
-└── chat_memory/            # Per-user chat history JSON files
-```
-
----
 
 ## 🤝 Contributing
 
