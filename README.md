@@ -416,7 +416,7 @@ This project is provided as-is for educational and demonstration purposes. No fo
 - **API Endpoint**: https://final-project-4a2l.onrender.com
 - **Repository**: https://github.com/raevmood/final-project
 - **API Documentation**: https://final-project-4a2l.onrender.com/docs
-
+- **MCP Backend**: https://mcp-final.onrender.com/
 ---
 
 ## 🐛 Troubleshooting
