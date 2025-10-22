@@ -1,4 +1,4 @@
-# device_finder_chatbot.py
+# chatbot.py
 from typing import List, Optional
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder, HumanMessagePromptTemplate, SystemMessagePromptTemplate
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
