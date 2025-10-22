@@ -417,7 +417,7 @@ async def chat_with_devicefinder(
         )
         
         # Get response from the chatbot (with RAG context if available)
-        ai_response = chatbot.get_response(chat_message.message)
+        ai_response = await chatbot.get_response(chat_message.message)
         
         return {"response": ai_response}
 
