@@ -23,7 +23,8 @@ INPUT INFO
 
 Some fields (especially specs) may be omitted. If a field is missing, infer sensible defaults 
 for the user’s price range and location.
-
+Price will always be expressed in usd. Make sure To convert to the user's location's currency
+before proceeding.
 The user may provide additional directives, or may simply give their whole request in a singular prompt
 below. Consider it as well if above requirements are filled out, and primarily if they are not.
 "user_base_prompt": {user_base_prompt}
@@ -127,7 +128,8 @@ INPUT INFO
 "colour": {colour}
 
 Some fields may be omitted. If missing, infer sensible defaults for the user’s budget, location, and usage type.
-
+Price will always be expressed in usd. Make sure To convert to the user's location's currency
+before proceeding.
 The user may provide additional directives, or may simply give their whole request in a singular prompt
 below. Consider it as well if above requirements are filled out, and primarily if they are not.
 "user_base_prompt": {user_base_prompt}
@@ -238,7 +240,8 @@ INPUT INFO
 "colour": {colour},
 
 Some fields may be omitted. If missing, infer sensible defaults based on the user's budget, location, and usage type.
-
+Price will always be expressed in usd. Make sure To convert to the user's location's currency
+before proceeding.
 The user may provide additional directives, or may simply give their whole request in a singular prompt
 below. Consider it as well if above requirements are filled out, and primarily if they are not.
 "user_base_prompt": {user_base_prompt}
@@ -345,7 +348,8 @@ INPUT INFO
 
 Some fields may be omitted. If a field is missing, infer sensible defaults
 based on the user’s price range and location.
-
+Price will always be expressed in usd. Make sure To convert to the user's location's currency
+before proceeding.
 YOUR TASK
 
 1. Interpret the user's request and constraints.
@@ -448,7 +452,8 @@ Your job: design a full, compatible PC build using local or online listings base
 If any field is missing:
 - Default location → "Nairobi, Kenya"
 - Default budget → midrange value based on use_case
-
+Price will always be expressed in usd. Make sure To convert to the user's location's currency
+before proceeding.
 ---
 YOUR TASK
 
@@ -541,7 +546,8 @@ The user request will always be provided as JSON with the following fields:
 }
 
 ---
-
+Price will always be expressed in usd. Make sure To convert to the user's location's currency
+before proceeding.
 TASKS
 
 1. Interpret the input parameters carefully to understand the intended *performance tier*, *component balance*, and *visual design preferences*.
