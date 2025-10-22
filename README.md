@@ -23,7 +23,7 @@ DeviceFinder.AI is an MVP application that leverages multiple specialized AI age
   - Earpiece/Headphone Agent
   - Pre-built PC Agent
   - Custom PC Builder Agent
-- **Conversational Chatbot**: AI assistant with per-user conversation memory
+- **Conversational Chatbot**: AI assistant with per-user conversation memory and MCP access to a Retriever tool
 - **Vector Database Search**: ChromaDB-powered semantic search for device matching
 - **Real-time Web Search**: Serper API integration for up-to-date pricing and availability
 - **Email Recommendations**: Send device recommendations directly to user email
@@ -46,7 +46,7 @@ DeviceFinder.AI is an MVP application that leverages multiple specialized AI age
 - **Search**: Serper API for real-time web search
 - **Auth**: JWT with bcrypt password hashing (in-memory user store)
 - **Deployment**: Dockerized on Render
-
+- **MCP**: Chatbot access to context
 ### Frontend Stack
 - **Tech**: Vanilla HTML5, CSS3, JavaScript (ES6+)
 - **Hosting**: GitHub Pages
