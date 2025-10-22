@@ -11,7 +11,7 @@ import httpx
 class RAGClient:
     """Client for retrieving context from MCP RAG server"""
     
-    def __init__(self, base_url: str = "http://localhost:8001"):
+    def __init__(self, base_url: str = "https://mcp-final.onrender.com"):
         """
         Initialize RAG client.
         
