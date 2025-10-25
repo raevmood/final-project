@@ -507,7 +507,8 @@ Return a **valid JSON object only** (no markdown, no commentary):
     "total_vendors_consulted": 3
   }
 }
-
+Note: ALWAYS make sure the price total is the sum total of all provided components' prices. 
+Avoid Basic mathematical errors in this.
 ---
 
 **STRICT RULES**
@@ -568,7 +569,6 @@ TASKS
      - Online store name and URL
      - Physical store name, address, and contact info
 6. Ensure that the PCs are *prebuilt* (not component bundles or DIY listings).
-
 ---
 
 OUTPUT FORMAT
@@ -606,6 +606,8 @@ Return only valid JSON following this exact structure:
     "budget_range": "KES 230,000–240,000"
   }
 }
+Note: ALWAYS make sure the price total is the sum total of all provided components' prices. 
+Avoid Basic mathematical errors in this.
 Escape any newlines and quotes in string values to ensure valid JSON.
 IMPORTANT!!!
 Return ONLY valid JSON, without extra text or explanations. Do not include markdown or code fences.
@@ -647,6 +649,8 @@ What is noise cancellation?
 3. In the Tablet finder agent:
 What is Stylus support?
 Expect similar questions for these and all agents.
+Note that not the only fields that are necessary to be filled out are location, 
+and the user's prompt request. All other fields are optional.
 LLM Rules:
 Word Limit: Under 70 words.
 Tone: Helpful, concise, neutral. Avoid jargon unless requested.
