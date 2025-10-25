@@ -5,6 +5,8 @@ Simple dictionary-based storage - perfect for MVP/demo
 from datetime import datetime
 from typing import Optional, Dict
 from passlib.context import CryptContext
+import json
+from pathlib import Path
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -16,6 +18,43 @@ USERS_DB: Dict[str, dict] = {}
 # Auto-increment ID counter
 _user_id_counter = 1
 
+# Persistent storage file
+USERS_FILE = Path("users_data.json")
+
+
+def _load_users_from_disk():
+    """Load users from JSON file on startup"""
+    global USERS_DB, _user_id_counter
+    
+    if USERS_FILE.exists():
+        try:
+            with open(USERS_FILE, 'r') as f:
+                data = json.load(f)
+                USERS_DB = data.get('users', {})
+                _user_id_counter = data.get('next_id', 1)
+            print(f"✓ Loaded {len(USERS_DB)} users from disk")
+        except Exception as e:
+            print(f"⚠️  Could not load users from disk: {e}")
+            USERS_DB = {}
+            _user_id_counter = 1
+    else:
+        print("ℹ️  No existing users file found, starting fresh")
+
+
+def _save_users_to_disk():
+    """Save users to JSON file"""
+    try:
+        data = {
+            'users': USERS_DB,
+            'next_id': _user_id_counter
+        }
+        with open(USERS_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f"⚠️  Could not save users to disk: {e}")
+
+
+_load_users_from_disk()
 
 class UserStore:
     """Manages in-memory user storage"""
@@ -73,6 +112,7 @@ class UserStore:
         
         USERS_DB[username] = user_data
         _user_id_counter += 1
+        _save_users_to_disk()  # ADD THIS LINE
         
         return user_data
     
@@ -119,13 +159,14 @@ class UserStore:
         """Update user's last login timestamp"""
         if username in USERS_DB:
             USERS_DB[username]["last_login"] = datetime.utcnow().isoformat() + "Z"
-    
+            _save_users_to_disk()  # ADD THIS LINE
+
     @staticmethod
     def increment_search_count(username: str):
         """Increment user's search count (optional tracking)"""
         if username in USERS_DB:
             USERS_DB[username]["search_count"] += 1
-    
+            _save_users_to_disk()  # ADD THIS LINE
     @staticmethod
     def get_all_users() -> list:
         """Get all users (for admin purposes)"""
@@ -141,6 +182,7 @@ class UserStore:
         """Delete a user (for admin purposes)"""
         if username in USERS_DB:
             del USERS_DB[username]
+            _save_users_to_disk()  # ADD THIS LINE
             return True
         return False
 
